@@ -7,6 +7,14 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id         String   @id @default(cuid())
+  username   String   @unique
+  loginToken String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model MemBox {
   id        String   @id @default(cuid())
   slug      String   @unique

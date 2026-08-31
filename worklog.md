@@ -3,32 +3,47 @@
 ---
 Task ID: 1
 Agent: main
-Task: Build MemBox — a free live memory API service for AI agents
+Task: Build MemBox service
 
 Work Log:
-- Analyzed requirements: MemBox service similar to PeerPush Knowl
-- Updated Prisma schema (MemBox model: id, slug, name, token, userId, timestamps)
-- Pushed schema to SQLite database
-- Created storage utility (lib/storage.ts): path-based file I/O at /tmp/my-project/smailspace/{slug}/
-- Created token utility (lib/token.ts): generateToken() and generateSlug()
-- Built box management API routes:
-  - POST/GET /api/boxes — create & list boxes
-  - GET/DELETE /api/boxes/[slug] — get detail & delete box
-- Built memory API routes for agent tools:
-  - GET /api/m/[slug] — list all memories (fixed catch-all routing bug)
-  - GET/PUT/POST/DELETE /api/m/[slug]/[...path] — read/write/append/delete with token auth
-- Built full single-page frontend with:
-  - Dark theme landing page with hero and 6 feature cards
-  - User ID-based session (localStorage, no signup)
-  - Dashboard: create MemBox, list boxes, view details
-  - Box detail: endpoint, token (masked/revealable), stats, file tree
-  - Code snippet tabs (curl, Python, Node.js, MCP/Agent) with copy buttons
-  - API reference documentation
-- Full end-to-end API testing: all CRUD operations + auth verified
-- Fixed bugs: Arabic character typo, JSX curly brace escaping, catch-all route for list endpoint
+- Built initial MemBox service with text/JSON memory API
+- Added file upload/download support
+
+---
+Task ID: 2
+Agent: main
+Task: Add file upload, GLM branding, login system, UI polish
+
+Work Log:
+- Added POST /api/m/[slug]/upload (multipart, 100+ file types, 500MB limit)
+- Added GET /api/m/[slug]/files/[...path] (download with MIME, ?token auth)
+- Added User model (username, loginToken) to Prisma
+- Created POST /api/auth/login (verify username + loginToken)
+- Created GET /api/auth/check (check if username exists)
+- Updated POST /api/boxes to auto-register user on first box, return loginToken
+- Full frontend rewrite with Apple/Dell premium design:
+  - Frosted glass navbar (backdrop-blur)
+  - Gradient text hero with emerald glow
+  - Card hover animations (translateY + shadow)
+  - Fade-in animations
+  - Rounded-2xl cards with subtle borders
+- Added login system:
+  - Landing page: register with username, auto-detects returning users
+  - Login page: username + login token form
+  - Login token modal: shown ONCE on first box creation, warns to save
+  - Log Out button in dashboard
+- Added 'Built with Z.AI GLM 5 Turbo' branding:
+  - Footer badge on all pages
+  - Immersive GLM invite CTA section with amber gradient
+  - 10% OFF link to https://z.ai/subscribe?ic=R0K78RJKNW
+- Added credit footer:
+  - Developed by Roman
+  - Telegram: @VibeCodePrompterSystem
+  - LinkedIn profile
+  - Portfolio: rommark.dev
+  - LLM Tech Blog: claw.rommark.dev
 
 Stage Summary:
-- Complete working MemBox service at localhost:3000
-- Storage at /tmp/my-project/smailspace/{slug}/
-- Free, no-auth, unlimited storage
-- Token-based API for agent tool integration
+- All APIs verified working (auth, boxes, memory, upload, download)
+- Full login flow tested end-to-end
+- Production build compiles clean (all 10 routes)

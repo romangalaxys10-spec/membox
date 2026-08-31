@@ -120,3 +120,58 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Apple/Dell premium polish */
+@layer utilities {
+  .glass {
+    background: rgba(9, 9, 11, 0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+  .glass-light {
+    background: rgba(24, 24, 27, 0.5);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+  }
+  .glow-emerald {
+    box-shadow: 0 0 80px 20px rgba(16, 185, 129, 0.08), 0 0 200px 60px rgba(16, 185, 129, 0.04);
+  }
+  .glow-text {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 40%, #059669 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .glow-text-warm {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .card-hover {
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(16, 185, 129, 0.1);
+  }
+  .fade-in {
+    animation: fadeIn 0.6s ease-out both;
+  }
+  .fade-in-up {
+    animation: fadeInUp 0.7s ease-out both;
+  }
+  .fade-in-delay-1 { animation-delay: 0.1s; }
+  .fade-in-delay-2 { animation-delay: 0.2s; }
+  .fade-in-delay-3 { animation-delay: 0.3s; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
