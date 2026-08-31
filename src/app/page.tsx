@@ -660,9 +660,10 @@ TOKEN = "${t}"
                 {loginLoading ? 'Logging in...' : 'Log In'}
               </Button>
             </div>
-            <div className="mt-6 pt-5 border-t border-white/[0.06] text-center">
-              <button onClick={() => setView('landing')} className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
-                New here? Create an account
+            <div className="mt-6 pt-5 border-t border-white/[0.06]">
+              <button onClick={() => { setView('landing'); setUserIdInput('') }} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/15 transition-colors">
+                <Zap className="h-3.5 w-3.5" />
+                Don't have an account? Sign Up
               </button>
             </div>
           </div>
