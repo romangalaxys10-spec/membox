@@ -13,15 +13,16 @@ import {
   HardDrive, Terminal, ChevronRight, Box, FileText, Folder, Eye,
   Upload, Download, File, FileSpreadsheet, FileImage, FileCode,
   FileArchive, X, ArrowRight, LogIn, Sparkles, ExternalLink,
-  AlertTriangle, Cpu, UserPlus,
+  AlertTriangle, Cpu, UserPlus, FolderPlus, ChevronLeft, Search, FileMinus,
 } from 'lucide-react'
 
 /* ── Types ────────────────────────────────────── */
+interface FileEntry { name: string; type: 'file' | 'directory'; size?: number; modified?: string; path?: string }
 interface MemBox {
   id: string; slug: string; name: string; token: string
   userId: string; createdAt: string
   fileCount?: number; totalSize?: number
-  files?: { name: string; type: 'file' | 'directory'; size?: number; modified?: string }[]
+  files?: FileEntry[]
 }
 interface UploadResult {
   name: string; path?: string; size?: number; type?: string; status?: string; error?: string
@@ -75,22 +76,233 @@ function getFileIcon(name: string) {
   return <File className="h-4 w-4 text-zinc-500" />
 }
 
-function StorageTree({ files, slug, token }: { files: MemBox['files']; slug: string; token: string }) {
-  if (!files || files.length === 0) return <p className="text-sm text-zinc-500 py-4 text-center">No files yet. Upload documents or use the API.</p>
+function isTextFile(name: string): boolean {
+  const ext = name.split('.').pop()?.toLowerCase() || ''
+  return ['txt','md','json','yaml','yml','xml','csv','tsv','sql','py','js','ts','jsx','tsx','go','rs','java','c','cpp','h','hpp','cs','rb','php','sh','bash','zsh','html','htm','css','scss','less','toml','ini','cfg','conf','env','gitignore','dockerfile','makefile','log','r','swift','kt','dart','lua','pl','ex','exs','clj','hs','ml','vim','sh','bat','ps1','graphql','gql','proto','tf','hcl','rego','wasm','asm','s','vue','svelte','astro'].includes(ext)
+}
+
+function FileBrowser({ slug, token, onRefresh }: { slug: string; token: string; onRefresh: () => void }) {
+  const [currentPath, setCurrentPath] = useState('')
+  const [browserFiles, setBrowserFiles] = useState<FileEntry[]>([])
+  const [browserLoading, setBrowserLoading] = useState(false)
+  const [previewFile, setPreviewFile] = useState<string | null>(null)
+  const [previewContent, setPreviewContent] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [newFolderName, setNewFolderName] = useState('')
+  const [showNewFolder, setShowNewFolder] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+
+  const navigateTo = useCallback(async (path: string) => {
+    setCurrentPath(path)
+    setPreviewFile(null)
+    setPreviewContent('')
+    setDeleteConfirm(null)
+    setSearchQuery('')
+    setBrowserLoading(true)
+    try {
+      const res = await fetch(`/api/boxes/${slug}/files?path=${encodeURIComponent(path)}`)
+      const data = await res.json()
+      if (data.files) setBrowserFiles(data.files.map((f: FileEntry) => ({ ...f, path: path ? `${path}/${f.name}` : f.name })))
+    } catch { toast.error('Failed to browse') }
+    finally { setBrowserLoading(false) }
+  }, [slug])
+
+  useEffect(() => { navigateTo('') }, [slug])
+
+  const openFolder = (name: string) => navigateTo(currentPath ? `${currentPath}/${name}` : name)
+  const goUp = () => { if (currentPath) { const parts = currentPath.split('/'); parts.pop(); navigateTo(parts.join('/')) } }
+  const goToPath = (idx: number) => { const parts = currentPath.split('/').slice(0, idx + 1); navigateTo(parts.join('/')) }
+
+  const previewTextFile = async (filePath: string) => {
+    setPreviewFile(filePath)
+    setPreviewLoading(true)
+    setPreviewContent('')
+    try {
+      const res = await fetch(`/api/boxes/${slug}/files?preview=${encodeURIComponent(filePath)}`)
+      const data = await res.json()
+      if (data.preview) setPreviewContent(data.preview)
+      else toast.error('Cannot preview this file')
+    } catch { toast.error('Preview failed') }
+    finally { setPreviewLoading(false) }
+  }
+
+  const handleDelete = async (filePath: string) => {
+    try {
+      const res = await fetch(`/api/boxes/${slug}/files/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ filePath }),
+      })
+      const data = await res.json()
+      if (data.error) { toast.error(data.error); return }
+      toast.success('Deleted')
+      setDeleteConfirm(null)
+      if (previewFile === filePath) { setPreviewFile(null); setPreviewContent('') }
+      navigateTo(currentPath)
+      onRefresh()
+    } catch { toast.error('Delete failed') }
+  }
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return
+    const folderPath = currentPath ? `${currentPath}/${newFolderName.trim()}` : newFolderName.trim()
+    try {
+      const res = await fetch(`/api/m/${slug}/${folderPath}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '', _mkdir: true }),
+      })
+      if (res.ok) { toast.success(`Folder "${newFolderName.trim()}" created`); setNewFolderName(''); setShowNewFolder(false); navigateTo(currentPath); onRefresh() }
+      else toast.error('Failed to create folder')
+    } catch { toast.error('Failed') }
+  }
+
+  const pathParts = currentPath ? currentPath.split('/') : []
+  const filteredFiles = searchQuery
+    ? browserFiles.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : browserFiles
+  const folderCount = filteredFiles.filter(f => f.type === 'directory').length
+  const fileCount = filteredFiles.filter(f => f.type === 'file').length
+
   return (
-    <div className="space-y-0.5">
-      {files.map((f) => (
-        <div key={f.name} className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-white/[0.04] text-sm group transition-colors">
-          {f.type === 'directory' ? <Folder className="h-4 w-4 text-amber-400/80 shrink-0" /> : <div className="shrink-0">{getFileIcon(f.name)}</div>}
-          <span className="flex-1 text-zinc-300 font-mono text-xs truncate" title={f.name}>{f.name}</span>
-          {f.type === 'file' && f.size !== undefined && <span className="text-[11px] text-zinc-600 shrink-0">{formatBytes(f.size!)}</span>}
-          {f.type === 'file' && (
-            <a href={`/api/m/${slug}/files/${f.name}?token=${token}`} className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="Download">
-              <Download className="h-3.5 w-3.5 text-zinc-500 hover:text-emerald-400" />
-            </a>
-          )}
+    <div className="space-y-3">
+      {/* Breadcrumbs */}
+      <div className="flex items-center gap-1 text-xs min-w-0 overflow-x-auto scrollbar-none">
+        <button onClick={() => navigateTo('')} className={`shrink-0 px-1.5 py-0.5 rounded-md transition-colors ${!currentPath ? 'bg-emerald-500/10 text-emerald-400 font-medium' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]'}`}>Root</button>
+        {pathParts.map((part, i) => (
+          <span key={i} className="flex items-center gap-1 shrink-0">
+            <ChevronRight className="h-3 w-3 text-zinc-700" />
+            <button onClick={() => goToPath(i)} className={`px-1.5 py-0.5 rounded-md transition-colors ${i === pathParts.length - 1 ? 'bg-emerald-500/10 text-emerald-400 font-medium' : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]'}`}>{part}</button>
+          </span>
+        ))}
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-600" />
+          <Input
+            placeholder="Filter files..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-8 h-8 bg-black/30 border-white/[0.06] text-xs rounded-lg placeholder:text-zinc-700"
+          />
         </div>
-      ))}
+        <Button variant="ghost" size="sm" onClick={() => { setShowNewFolder(!showNewFolder); setNewFolderName('') }} className="h-8 px-2 text-zinc-500 hover:text-emerald-400">
+          <FolderPlus className="h-3.5 w-3.5" />
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => { navigateTo(currentPath); onRefresh() }} className="h-8 px-2 text-zinc-500 hover:text-zinc-200">
+          <span className="text-[10px]">Refresh</span>
+        </Button>
+      </div>
+
+      {/* New folder input */}
+      {showNewFolder && (
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="folder-name"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setShowNewFolder(false) }}
+            autoFocus
+            className="h-8 bg-black/30 border-white/[0.06] text-xs rounded-lg placeholder:text-zinc-700"
+          />
+          <Button size="sm" onClick={handleCreateFolder} disabled={!newFolderName.trim()} className="h-8 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs">Create</Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowNewFolder(false)} className="h-8 w-8 p-0"><X className="h-3.5 w-3.5" /></Button>
+        </div>
+      )}
+
+      {/* Info bar */}
+      <div className="flex items-center justify-between text-[10px] text-zinc-600 px-1">
+        <span>{folderCount > 0 ? `${folderCount} folder${folderCount > 1 ? 's' : ''}` : ''}{folderCount > 0 && fileCount > 0 ? ', ' : ''}{fileCount} file{fileCount !== 1 ? 's' : ''}</span>
+        {currentPath && <button onClick={goUp} className="flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors"><ChevronLeft className="h-3 w-3" /> Parent</button>}
+      </div>
+
+      {/* File list */}
+      {browserLoading ? (
+        <div className="text-center py-8 text-zinc-600 text-xs">Loading...</div>
+      ) : filteredFiles.length === 0 ? (
+        <div className="text-center py-8 rounded-xl border border-dashed border-white/[0.06]">
+          <Folder className="h-8 w-8 text-zinc-800 mx-auto mb-2" />
+          <p className="text-zinc-600 text-xs">{searchQuery ? 'No matching files' : 'Empty folder'}</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-white/[0.06] bg-black/20 overflow-hidden divide-y divide-white/[0.04]">
+          {/* Header */}
+          <div className="grid grid-cols-[1fr_80px_100px_60px] gap-2 px-3 py-2 text-[10px] text-zinc-600 uppercase tracking-wider bg-white/[0.02]">
+            <span>Name</span><span>Size</span><span>Modified</span><span></span>
+          </div>
+          {/* Rows */}
+          {filteredFiles.map((f) => {
+            const isActive = previewFile === f.path
+            return (
+              <div
+                key={f.name}
+                className={`grid grid-cols-[1fr_80px_100px_60px] gap-2 px-3 py-2 items-center text-xs group transition-colors ${isActive ? 'bg-emerald-500/[0.05]' : 'hover:bg-white/[0.02]'}`}
+                onDoubleClick={() => f.type === 'directory' ? openFolder(f.name) : isTextFile(f.name) ? previewTextFile(f.path || f.name) : undefined}
+              >
+                {/* Name + icon */}
+                <div className={`flex items-center gap-2.5 min-w-0 ${f.type === 'directory' ? 'cursor-pointer' : ''} ${isTextFile(f.name) && f.type === 'file' ? 'cursor-pointer' : ''}`} onClick={() => f.type === 'directory' ? openFolder(f.name) : isTextFile(f.name) ? previewTextFile(f.path || f.name) : undefined}>
+                  {f.type === 'directory' ? (
+                    <div className="h-7 w-7 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 border border-amber-500/10"><Folder className="h-3.5 w-3.5 text-amber-400" /></div>
+                  ) : (
+                    <div className="h-7 w-7 rounded-lg bg-white/[0.04] flex items-center justify-center shrink-0">{getFileIcon(f.name)}</div>
+                  )}
+                  <span className="font-mono text-[11px] truncate {f.type === 'directory' ? 'text-zinc-200' : 'text-zinc-300'}">{f.name}</span>
+                </div>
+                {/* Size */}
+                <span className="text-zinc-600 text-[11px]">{f.type === 'file' && f.size !== undefined ? formatBytes(f.size) : '—'}</span>
+                {/* Modified */}
+                <span className="text-zinc-700 text-[10px]">{f.modified ? new Date(f.modified).toLocaleDateString() : '—'}</span>
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-0.5">
+                  {f.type === 'file' && (
+                    <a
+                      href={`/api/m/${slug}/files/${f.path || f.name}?token=${token}`}
+                      className="h-6 w-6 rounded-md flex items-center justify-center text-zinc-700 hover:text-emerald-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-white/[0.06]"
+                      title="Download"
+                    ><Download className="h-3 w-3" /></a>
+                  )}
+                  {deleteConfirm === (f.path || f.name) ? (
+                    <div className="flex items-center gap-0.5">
+                      <button onClick={() => handleDelete(f.path || f.name)} className="h-6 px-1.5 rounded-md bg-red-500/20 text-red-400 text-[10px] font-medium hover:bg-red-500/30 transition-colors">Yes</button>
+                      <button onClick={() => setDeleteConfirm(null)} className="h-6 px-1.5 rounded-md text-zinc-500 text-[10px] hover:bg-white/[0.06] transition-colors">No</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setDeleteConfirm(f.path || f.name)} className="h-6 w-6 rounded-md flex items-center justify-center text-zinc-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-white/[0.06]" title="Delete">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Preview panel */}
+      {previewFile && (
+        <div className="rounded-xl border border-white/[0.06] bg-black/30 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 bg-white/[0.03] border-b border-white/[0.04]">
+            <div className="flex items-center gap-2 min-w-0">
+              <Eye className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              <span className="text-[11px] text-zinc-400 font-mono truncate">{previewFile}</span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <a href={`/api/m/${slug}/files/${previewFile}?token=${token}`} className="h-6 px-2 rounded-md flex items-center gap-1 text-[10px] text-zinc-500 hover:text-emerald-400 hover:bg-white/[0.06] transition-colors"><Download className="h-3 w-3" />Download</a>
+              <button onClick={() => { setPreviewFile(null); setPreviewContent('') }} className="h-6 w-6 rounded-md flex items-center justify-center text-zinc-600 hover:text-zinc-200 hover:bg-white/[0.06] transition-colors"><X className="h-3 w-3" /></button>
+            </div>
+          </div>
+          <div className="max-h-80 overflow-auto">
+            {previewLoading ? (
+              <div className="flex items-center justify-center py-8"><div className="h-5 w-5 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" /></div>
+            ) : (
+              <pre className="p-4 text-[12px] leading-relaxed text-zinc-400 font-mono whitespace-pre-wrap break-all">{previewContent}</pre>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -892,7 +1104,7 @@ TOKEN = "${t}"
                   )}
                 </div>
 
-                {/* Stats + Files */}
+                {/* Stats */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-center">
                     <div className="text-xl font-bold text-emerald-400">{boxDetail?.fileCount || 0}</div>
@@ -903,18 +1115,20 @@ TOKEN = "${t}"
                     <div className="text-[10px] text-zinc-600 uppercase tracking-wider">Size</div>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
-                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><FolderOpen className="h-4 w-4 text-zinc-500" /> Stored Items</h3>
-                  {detailLoading ? <div className="text-center py-4 text-zinc-600 text-sm">Loading...</div> : <div className="max-h-64 overflow-y-auto"><StorageTree files={boxDetail?.files} slug={activeBox.slug} token={activeBox.token} /></div>}
-                </div>
 
                 <Button variant="destructive" className="w-full rounded-xl" onClick={() => handleDeleteBox(activeBox.slug)}>
                   <Trash2 className="h-4 w-4 mr-2" /> Delete This MemBox
                 </Button>
               </div>
 
-              {/* Right: Code + API Ref */}
+              {/* Right: File Browser + Code */}
               <div className="lg:col-span-2 space-y-5">
+                {/* File Browser - full width */}
+                <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-4"><FolderOpen className="h-4 w-4 text-emerald-400" /> File Browser</h3>
+                  <FileBrowser slug={activeBox.slug} token={activeBox.token} onRefresh={() => handleViewBox(activeBox)} />
+                </div>
+
                 <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
                   <h3 className="text-base font-semibold flex items-center gap-2 mb-1"><Terminal className="h-4 w-4 text-emerald-400" /> API Usage</h3>
                   <p className="text-xs text-zinc-500 mb-4">Copy these snippets into your coding tools, agents, or scripts.</p>
