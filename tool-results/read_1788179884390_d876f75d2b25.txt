@@ -1,0 +1,990 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState, useCallback, useEffect, useRef } from 'react'
+     4→     4→import { Button } from '@/components/ui/button'
+     5→     5→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+     6→     6→import { Input } from '@/components/ui/input'
+     7→     7→import { Label } from '@/components/ui/label'
+     8→     8→import { Badge } from '@/components/ui/badge'
+     9→     9→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    10→    10→import { Toaster, toast } from 'sonner'
+    11→    11→import {
+    12→    12→  Brain,
+    13→    13→  Plus,
+    14→    14→  Copy,
+    15→    15→  Check,
+    16→    16→  Trash2,
+    17→    17→  Key,
+    18→    18→  FolderOpen,
+    19→    19→  Zap,
+    20→    20→  Shield,
+    21→    21→  HardDrive,
+    22→    22→  Terminal,
+    23→    23→  ChevronRight,
+    24→    24→  Box,
+    25→    25→  FileText,
+    26→    26→  Folder,
+    27→    27→  Eye,
+    28→    28→  Upload,
+    29→    29→  Download,
+    30→    30→  File,
+    31→    31→  FileSpreadsheet,
+    32→    32→  FileImage,
+    33→    33→  FileCode,
+    34→    34→  FileArchive,
+    35→    35→  X,
+    36→    36→} from 'lucide-react'
+    37→    37→
+    38→    38→interface MemBox {
+    39→    39→  id: string
+    40→    40→  slug: string
+    41→    41→  name: string
+    42→    42→  token: string
+    43→    43→  userId: string
+    44→    44→  createdAt: string
+    45→    45→  fileCount?: number
+    46→    46→  totalSize?: number
+    47→    47→  files?: { name: string; type: 'file' | 'directory'; size?: number; modified?: string }[]
+    48→    48→}
+    49→    49→
+    50→    50→interface UploadResult {
+    51→    51→  name: string
+    52→    52→  path?: string
+    53→    53→  size?: number
+    54→    54→  type?: string
+    55→    55→  status?: string
+    56→    56→  error?: string
+    57→    57→}
+    58→    58→
+    59→    59→function getUserId() {
+    60→    60→  if (typeof window === 'undefined') return ''
+    61→    61→  return localStorage.getItem('membox-user-id') || ''
+    62→    62→}
+    63→    63→
+    64→    64→function setUserId(id: string) {
+    65→    65→  localStorage.setItem('membox-user-id', id)
+    66→    66→}
+    67→    67→
+    68→    68→function CopyButton({ text, label }: { text: string; label?: string }) {
+    69→    69→  const [copied, setCopied] = useState(false)
+    70→    70→  const handleCopy = async () => {
+    71→    71→    await navigator.clipboard.writeText(text)
+    72→    72→    setCopied(true)
+    73→    73→    setTimeout(() => setCopied(false), 2000)
+    74→    74→  }
+    75→    75→  return (
+    76→    76→    <Button variant="ghost" size="sm" onClick={handleCopy} className="h-7 gap-1.5 text-xs">
+    77→    77→      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+    78→    78→      {label || (copied ? 'Copied' : 'Copy')}
+    79→    79→    </Button>
+    80→    80→  )
+    81→    81→}
+    82→    82→
+    83→    83→function formatBytes(bytes: number): string {
+    84→    84→  if (bytes === 0) return '0 B'
+    85→    85→  const k = 1024
+    86→    86→  const sizes = ['B', 'KB', 'MB', 'GB']
+    87→    87→  const i = Math.floor(Math.log(bytes) / Math.log(k))
+    88→    88→  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+    89→    89→}
+    90→    90→
+    91→    91→function CodeBlock({ code, language }: { code: string; language?: string }) {
+    92→    92→  return (
+    93→    93→    <div className="relative group rounded-lg bg-zinc-950 border border-zinc-800 overflow-hidden">
+    94→    94→      <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/80 border-b border-zinc-800">
+    95→    95→        <span className="text-xs text-zinc-400 font-mono">{language || 'plaintext'}</span>
+    96→    96→        <CopyButton text={code} />
+    97→    97→      </div>
+    98→    98→      <pre className="p-4 overflow-x-auto text-sm leading-relaxed">
+    99→    99→        <code className="text-zinc-300 font-mono whitespace-pre">{code}</code>
+   100→   100→      </pre>
+   101→   101→    </div>
+   102→   102→  )
+   103→   103→}
+   104→   104→
+   105→   105→function getFileIcon(name: string) {
+   106→   106→  const ext = name.split('.').pop()?.toLowerCase() || ''
+   107→   107→  const docExts = ['pdf', 'doc', 'docx', 'odt', 'rtf', 'txt', 'md', 'epub', 'mobi']
+   108→   108→  const sheetExts = ['xls', 'xlsx', 'ods', 'csv', 'tsv']
+   109→   109→  const imgExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'avif']
+   110→   110→  const codeExts = ['js', 'ts', 'jsx', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'css', 'html', 'json', 'yaml', 'yml', 'xml', 'sql', 'sh', 'vue', 'svelte']
+   111→   111→  const archiveExts = ['zip', 'tar', 'gz', 'bz2', '7z', 'rar']
+   112→   112→  const mediaExts = ['mp3', 'wav', 'ogg', 'flac', 'mp4', 'webm', 'avi', 'mov', 'mkv']
+   113→   113→
+   114→   114→  if (docExts.includes(ext)) return <FileText className="h-4 w-4 text-blue-400" />
+   115→   115→  if (sheetExts.includes(ext)) return <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+   116→   116→  if (imgExts.includes(ext)) return <FileImage className="h-4 w-4 text-purple-400" />
+   117→   117→  if (codeExts.includes(ext)) return <FileCode className="h-4 w-4 text-amber-400" />
+   118→   118→  if (archiveExts.includes(ext)) return <FileArchive className="h-4 w-4 text-orange-400" />
+   119→   119→  if (mediaExts.includes(ext)) return <File className="h-4 w-4 text-pink-400" />
+   120→   120→  return <File className="h-4 w-4 text-zinc-400" />
+   121→   121→}
+   122→   122→
+   123→   123→function FileTreeItem({
+   124→   124→  file,
+   125→   125→  slug,
+   126→   126→  token,
+   127→   127→  basePath,
+   128→   128→}: {
+   129→   129→  file: { name: string; type: 'file' | 'directory'; size?: number; modified?: string }
+   130→   130→  slug: string
+   131→   131→  token: string
+   132→   132→  basePath: string
+   133→   133→}) {
+   134→   134→  const downloadUrl = `${basePath}/api/m/${slug}/files/${name}`
+   135→   135→  const headers = new Headers()
+   136→   136→  headers.set('Authorization', `Bearer ${token}`)
+   137→   137→
+   138→   138→  return (
+   139→   139→    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-zinc-800/50 text-sm group">
+   140→   140→      {file.type === 'directory' ? (
+   141→   141→        <Folder className="h-4 w-4 text-amber-400 shrink-0" />
+   142→   142→      ) : (
+   143→   143→        <div className="shrink-0">{getFileIcon(file.name)}</div>
+   144→   144→      )}
+   145→   145→      <span className="flex-1 text-zinc-300 font-mono text-xs truncate" title={file.name}>
+   146→   146→        {file.name}
+   147→   147→      </span>
+   148→   148→      {file.type === 'file' && file.size !== undefined && (
+   149→   149→        <span className="text-[11px] text-zinc-500 shrink-0">{formatBytes(file.size!)}</span>
+   150→   150→      )}
+   151→   151→      {file.modified && (
+   152→   152→        <span className="text-[11px] text-zinc-600 shrink-0 hidden sm:inline">
+   153→   153→          {new Date(file.modified).toLocaleDateString()}
+   154→   154→        </span>
+   155→   155→      )}
+   156→   156→      {file.type === 'file' && (
+   157→   157→        <a
+   158→   158→          href={`/api/m/${slug}/files/${file.name}?token=${token}`}
+   159→   159→          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+   160→   160→          title="Download"
+   161→   161→        >
+   162→   162→          <Download className="h-3.5 w-3.5 text-zinc-400 hover:text-emerald-400" />
+   163→   163→        </a>
+   164→   164→      )}
+   165→   165→    </div>
+   166→   166→  )
+   167→   167→}
+   168→   168→
+   169→   169→function StorageTree({ files, slug, token }: { files: MemBox['files']; slug: string; token: string }) {
+   170→   170→  if (!files || files.length === 0) {
+   171→   171→    return <p className="text-sm text-zinc-500 py-4 text-center">No files yet. Upload documents or use the API to store memories.</p>
+   172→   172→  }
+   173→   173→  const basePath = typeof window !== 'undefined' ? window.location.origin : ''
+   174→   174→  return (
+   175→   175→    <div className="space-y-0.5">
+   176→   176→      {files.map((f) => (
+   177→   177→        <FileTreeItem key={f.name} file={f} slug={slug} token={token} basePath={basePath} />
+   178→   178→      ))}
+   179→   179→    </div>
+   180→   180→  )
+   181→   181→}
+   182→   182→
+   183→   183→export default function Home() {
+   184→   184→  const [userId, setUserIdState] = useState('')
+   185→   185→  const [userIdInput, setUserIdInput] = useState('')
+   186→   186→  const [boxes, setBoxes] = useState<MemBox[]>([])
+   187→   187→  const [loading, setLoading] = useState(false)
+   188→   188→  const [boxName, setBoxName] = useState('')
+   189→   189→  const [selectedBox, setSelectedBox] = useState<MemBox | null>(null)
+   190→   190→  const [boxDetail, setBoxDetail] = useState<MemBox | null>(null)
+   191→   191→  const [detailLoading, setDetailLoading] = useState(false)
+   192→   192→  const [showToken, setShowToken] = useState<Record<string, boolean>>({})
+   193→   193→  const [uploading, setUploading] = useState(false)
+   194→   194→  const [uploadFolder, setUploadFolder] = useState('uploads')
+   195→   195→  const [dragOver, setDragOver] = useState(false)
+   196→   196→  const [uploadResults, setUploadResults] = useState<UploadResult[]>([])
+   197→   197→  const fileInputRef = useRef<HTMLInputElement>(null)
+   198→   198→
+   199→   199→  useEffect(() => {
+   200→   200→    const saved = getUserId()
+   201→   201→    if (saved) {
+   202→   202→      setUserIdState(saved)
+   203→   203→      setUserIdInput(saved)
+   204→   204→      fetchBoxes(saved)
+   205→   205→    }
+   206→   206→  }, [])
+   207→   207→
+   208→   208→  const fetchBoxes = useCallback(async (uid?: string) => {
+   209→   209→    const id = uid || userId
+   210→   210→    if (!id) return
+   211→   211→    setLoading(true)
+   212→   212→    try {
+   213→   213→      const res = await fetch(`/api/boxes?userId=${encodeURIComponent(id)}`)
+   214→   214→      const data = await res.json()
+   215→   215→      if (data.boxes) setBoxes(data.boxes)
+   216→   216→    } catch {
+   217→   217→      toast.error('Failed to load MemBoxes')
+   218→   218→    } finally {
+   219→   219→      setLoading(false)
+   220→   220→    }
+   221→   221→  }, [userId])
+   222→   222→
+   223→   223→  const handleSetUserId = () => {
+   224→   224→    const id = userIdInput.trim()
+   225→   225→    if (!id) { toast.error('Please enter a User ID'); return }
+   226→   226→    setUserIdState(id)
+   227→   227→    setUserId(id)
+   228→   228→    setBoxes([])
+   229→   229→    setSelectedBox(null)
+   230→   230→    fetchBoxes(id)
+   231→   231→    toast.success(`Welcome, ${id}!`)
+   232→   232→  }
+   233→   233→
+   234→   234→  const handleCreateBox = async () => {
+   235→   235→    if (!boxName.trim()) { toast.error('Please enter a name'); return }
+   236→   236→    try {
+   237→   237→      const res = await fetch('/api/boxes', {
+   238→   238→        method: 'POST',
+   239→   239→        headers: { 'Content-Type': 'application/json' },
+   240→   240→        body: JSON.stringify({ name: boxName.trim(), userId }),
+   241→   241→      })
+   242→   242→      const data = await res.json()
+   243→   243→      if (data.error) { toast.error(data.error); return }
+   244→   244→      setBoxName('')
+   245→   245→      toast.success('MemBox created!')
+   246→   246→      fetchBoxes()
+   247→   247→    } catch { toast.error('Failed to create MemBox') }
+   248→   248→  }
+   249→   249→
+   250→   250→  const handleDeleteBox = async (slug: string) => {
+   251→   251→    if (!confirm('Delete this MemBox and all its stored memories?')) return
+   252→   252→    try {
+   253→   253→      await fetch(`/api/boxes/${slug}`, { method: 'DELETE' })
+   254→   254→      if (selectedBox?.slug === slug) setSelectedBox(null)
+   255→   255→      toast.success('MemBox deleted')
+   256→   256→      fetchBoxes()
+   257→   257→    } catch { toast.error('Failed to delete') }
+   258→   258→  }
+   259→   259→
+   260→   260→  const handleViewBox = async (box: MemBox) => {
+   261→   261→    setSelectedBox(box)
+   262→   262→    setDetailLoading(true)
+   263→   263→    setUploadResults([])
+   264→   264→    try {
+   265→   265→      const res = await fetch(`/api/boxes/${box.slug}`)
+   266→   266→      const data = await res.json()
+   267→   267→      setBoxDetail(data)
+   268→   268→    } catch { toast.error('Failed to load box details') }
+   269→   269→    finally { setDetailLoading(false) }
+   270→   270→  }
+   271→   271→
+   272→   272→  const uploadFiles = async (fileList: FileList | File[]) => {
+   273→   273→    if (!selectedBox || fileList.length === 0) return
+   274→   274→    setUploading(true)
+   275→   275→    setUploadResults([])
+   276→   276→    try {
+   277→   277→      const formData = new FormData()
+   278→   278→      for (const f of Array.from(fileList)) {
+   279→   279→        formData.append('files', f)
+   280→   280→      }
+   281→   281→      if (uploadFolder.trim()) formData.append('folder', uploadFolder.trim())
+   282→   282→
+   283→   283→      const res = await fetch(`/api/m/${selectedBox.slug}/upload`, {
+   284→   284→        method: 'POST',
+   285→   285→        headers: { 'Authorization': `Bearer ${selectedBox.token}` },
+   286→   286→        body: formData,
+   287→   287→      })
+   288→   288→      const data = await res.json()
+   289→   289→      if (data.error) { toast.error(data.error); return }
+   290→   290→      setUploadResults(data.results || [])
+   291→   291→      if (data.uploaded > 0) toast.success(`${data.uploaded} file(s) uploaded!`)
+   292→   292→      if (data.failed > 0) toast.error(`${data.failed} file(s) failed`)
+   293→   293→      // Refresh file list
+   294→   294→      handleViewBox(selectedBox)
+   295→   295→      fetchBoxes()
+   296→   296→    } catch { toast.error('Upload failed') }
+   297→   297→    finally { setUploading(false) }
+   298→   298→  }
+   299→   299→
+   300→   300→  const handleDrop = (e: React.DragEvent) => {
+   301→   301→    e.preventDefault()
+   302→   302→    setDragOver(false)
+   303→   303→    if (e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files)
+   304→   304→  }
+   305→   305→
+   306→   306→  const getBaseUrl = () => (typeof window !== 'undefined' ? window.location.origin : '')
+   307→   307→
+   308→   308→  const generateCodeSnippets = (box: MemBox) => {
+   309→   309→    const base = getBaseUrl()
+   310→   310→    const s = box.slug
+   311→   311→    const t = box.token
+   312→   312→    return {
+   313→   313→      curl: `# --- Text Memory Operations ---
+   314→   314→
+   315→   315→# Store a memory
+   316→   316→curl -X PUT "${base}/api/m/${s}/my-key" \
+   317→   317→  -H "Authorization: Bearer ${t}" \
+   318→   318→  -H "Content-Type: application/json" \
+   319→   319→  -d '{"content": "This is my agent memory"}'
+   320→   320→
+   321→   321→# Read a memory
+   322→   322→curl "${base}/api/m/${s}/my-key" \
+   323→   323→  -H "Authorization: Bearer ${t}"
+   324→   324→
+   325→   325→# List all memories
+   326→   326→curl "${base}/api/m/${s}" \
+   327→   327→  -H "Authorization: Bearer ${t}"
+   328→   328→
+   329→   329→# --- File Upload ---
+   330→   330→
+   331→   331→# Upload a PDF document
+   332→   332→curl -X POST "${base}/api/m/${s}/upload" \
+   333→   333→  -H "Authorization: Bearer ${t}" \
+   334→   334→  -F "files=@document.pdf" \
+   335→   335→  -F "folder=uploads"
+   336→   336→
+   337→   337→# Upload multiple files (Word, Excel, etc.)
+   338→   338→curl -X POST "${base}/api/m/${s}/upload" \
+   339→   339→  -H "Authorization: Bearer ${t}" \
+   340→   340→  -F "files=@report.docx" \
+   341→   341→  -F "files=@data.xlsx" \
+   342→   342→  -F "files=@notes.pdf" \
+   343→   343→  -F "folder=docs"
+   344→   344→
+   345→   345→# Upload to a specific folder
+   346→   346→curl -X POST "${base}/api/m/${s}/upload" \
+   347→   347→  -H "Authorization: Bearer ${t}" \
+   348→   348→  -F "files=@image.png" \
+   349→   349→  -F "folder=images/screenshots"
+   350→   350→
+   351→   351→# --- File Download ---
+   352→   352→
+   353→   353→# Download a file
+   354→   354→curl -O -J "${base}/api/m/${s}/files/uploads/document.pdf" \
+   355→   355→  -H "Authorization: Bearer ${t}"
+   356→   356→
+   357→   357→# --- Delete ---
+   358→   358→
+   359→   359→curl -X DELETE "${base}/api/m/${s}/my-key" \
+   360→   360→  -H "Authorization: Bearer ${t}"`,
+   361→   361→
+   362→   362→      python: `import requests
+   363→   363→
+   364→   364→BASE = "${base}"
+   365→   365→SLUG = "${s}"
+   366→   366→HEADERS = {"Authorization": "Bearer ${t}"}
+   367→   367→
+   368→   368→# --- Text Memory Operations ---
+   369→   369→
+   370→   370→requests.put(
+   371→   371→    f"{BASE}/api/m/{SLUG}/project-context",
+   372→   372→    headers=HEADERS,
+   373→   373→    json={"content": "Working on a React app with TypeScript"}
+   374→   374→)
+   375→   375→
+   376→   376→resp = requests.get(f"{BASE}/api/m/{SLUG}/project-context", headers=HEADERS)
+   377→   377→print(resp.json())
+   378→   378→
+   379→   379→# --- File Upload ---
+   380→   380→
+   381→   381→# Upload a PDF
+   382→   382→with open("document.pdf", "rb") as f:
+   383→   383→    resp = requests.post(
+   384→   384→        f"{BASE}/api/m/{SLUG}/upload",
+   385→   385→        headers=HEADERS,
+   386→   386→        files={"files": ("document.pdf", f, "application/pdf")},
+   387→   387→        data={"folder": "uploads"}
+   388→   388→    )
+   389→   389→print(resp.json())
+   390→   390→
+   391→   391→# Upload multiple files
+   392→   392→files_to_upload = [
+   393→   393→    ("report.docx", open("report.docx", "rb"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+   394→   394→    ("data.xlsx", open("data.xlsx", "rb"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+   395→   395→    ("notes.pdf", open("notes.pdf", "rb"), "application/pdf"),
+   396→   396→]
+   397→   397→resp = requests.post(
+   398→   398→    f"{BASE}/api/m/{SLUG}/upload",
+   399→   399→    headers=HEADERS,
+   400→   400→    files=[("files", name, f, mime) for name, f, mime in files_to_upload],
+   401→   401→    data={"folder": "docs"}
+   402→   402→)
+   403→   403→print(resp.json())
+   404→   404→
+   405→   405→# --- File Download ---
+   406→   406→
+   407→   407→resp = requests.get(
+   408→   408→    f"{BASE}/api/m/{SLUG}/files/uploads/document.pdf",
+   409→   409→    headers=HEADERS
+   410→   410→)
+   411→   411→with open("downloaded.pdf", "wb") as f:
+   412→   412→    f.write(resp.content)
+   413→   413→
+   414→   414→# List all files
+   415→   415→resp = requests.get(f"{BASE}/api/m/{SLUG}", headers=HEADERS)
+   416→   416→print(resp.json())`,
+   417→   417→
+   418→   418→      node: `const BASE = "${base}";
+   419→   419→const SLUG = "${s}";
+   420→   420→const HEADERS = { Authorization: "Bearer ${t}" };
+   421→   421→
+   422→   422→// --- Text Memory Operations ---
+   423→   423→
+   424→   424→await fetch(\`\${BASE}/api/m/\${SLUG}/agent-state\`, {
+   425→   425→  method: "PUT",
+   426→   426→  headers: { ...HEADERS, "Content-Type": "application/json" },
+   427→   427→  body: JSON.stringify({ content: "Remember: user prefers functional style" }),
+   428→   428→});
+   429→   429→
+   430→   430→// --- File Upload ---
+   431→   431→
+   432→   432→// Upload a single file
+   433→   433→const form = new FormData();
+   434→   434→form.append("files", fileInput.files[0]);
+   435→   435→form.append("folder", "uploads");
+   436→   436→await fetch(\`\${BASE}/api/m/\${SLUG}/upload\`, {
+   437→   437→  method: "POST",
+   438→   438→  headers: HEADERS,  // Note: don't set Content-Type, browser sets it with boundary
+   439→   439→  body: form,
+   440→   440→});
+   441→   441→
+   442→   442→// Upload multiple files
+   443→   443→const form2 = new FormData();
+   444→   444→form2.append("files", pdfFile);
+   445→   445→form2.append("files", excelFile);
+   446→   446→form2.append("files", wordFile);
+   447→   447→form2.append("folder", "docs");
+   448→   448→const res = await fetch(\`\${BASE}/api/m/\${SLUG}/upload\`, {
+   449→   449→  method: "POST",
+   450→   450→  headers: HEADERS,
+   451→   451→  body: form2,
+   452→   452→});
+   453→   453→console.log(await res.json());
+   454→   454→
+   455→   455→// --- File Download ---
+   456→   456→
+   457→   457→const dl = await fetch(
+   458→   458→  \`\${BASE}/api/m/\${SLUG}/files/uploads/document.pdf\`,
+   459→   459→  { headers: HEADERS }
+   460→   460→);
+   461→   461→const blob = await dl.blob();
+   462→   462→const url = URL.createObjectURL(blob);
+   463→   463→const a = document.createElement("a");
+   464→   464→a.href = url; a.download = "document.pdf"; a.click();`,
+   465→   465→
+   466→   466→      mcp: `# MemBox as MCP-compatible Memory Server
+   467→   467→# Add to your Claude Desktop / AI tool config:
+   468→   468→
+   469→   469→# The MemBox API supports:
+   470→   470→# 1. Key-value text memory via PUT/GET/DELETE
+   471→   471→# 2. File upload (PDF, Word, Excel, images, etc.) via multipart POST
+   472→   472→# 3. File download via /files/ prefix
+   473→   473→
+   474→   474→BASE = "${base}"
+   475→   475→SLUG = "${s}"
+   476→   476→TOKEN = "${t}"
+   477→   477→
+   478→   478→# Example tool definitions for your agent:
+   479→   479→
+   480→   480→# membox_store: PUT {path, content} -> text memory
+   481→   481→# membox_read:  GET {path} -> text/JSON memory
+   482→   482→# membox_upload: POST multipart {files, folder} -> file upload
+   483→   483→# membox_download: GET /files/{path} -> binary file
+   484→   484→# membox_list:  GET / -> list all stored items
+   485→   485→# membox_delete: DELETE {path} -> remove item
+   486→   486→
+   487→   487→# Upload endpoint: ${base}/api/m/${s}/upload
+   488→   488→# Download endpoint: ${base}/api/m/${s}/files/{path}
+   489→   489→# List endpoint: ${base}/api/m/${s}
+   490→   490→
+   491→   491→# Supported file types for upload:
+   492→   492→# Documents: .pdf, .doc, .docx, .odt, .rtf, .txt, .md, .html, .csv
+   493→   493→# Spreadsheets: .xls, .xlsx, .ods, .xlsm
+   494→   494→# Presentations: .ppt, .pptx, .odp
+   495→   495→# Data: .json, .yaml, .xml, .sql, .parquet, .onnx
+   496→   496→# Images: .png, .jpg, .jpeg, .gif, .webp, .svg
+   497→   497→# Audio/Video: .mp3, .wav, .mp4, .webm
+   498→   498→# Archives: .zip, .tar, .gz, .7z, .rar
+   499→   499→# Code: .py, .js, .ts, .go, .rs, .java, .cpp, and more
+   500→   500→# Max file size: 500 MB per file`,
+   501→   501→    }
+   502→   502→  }
+   503→   503→
+   504→   504→  // ─── Not logged in ─────────────────────────────────────
+   505→   505→  if (!userId) {
+   506→   506→    return (
+   507→   507→      <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
+   508→   508→        <header className="border-b border-zinc-800/60">
+   509→   509→          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+   510→   510→            <div className="flex items-center gap-2">
+   511→   511→              <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+   512→   512→                <Brain className="h-4 w-4 text-emerald-400" />
+   513→   513→              </div>
+   514→   514→              <span className="font-semibold text-lg tracking-tight">MemBox</span>
+   515→   515→            </div>
+   516→   516→            <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+   517→   517→              100% Free
+   518→   518→            </Badge>
+   519→   519→          </div>
+   520→   520→        </header>
+   521→   521→
+   522→   522→        <main className="flex-1">
+   523→   523→          <section className="max-w-4xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
+   524→   524→            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm mb-8">
+   525→   525→              <Zap className="h-3.5 w-3.5" />
+   526→   526→              No signup. No credit card. No limits.
+   527→   527→            </div>
+   528→   528→            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight mb-6">
+   529→   529→              Live Memory for
+   530→   530→              <br />
+   531→   531→              <span className="text-emerald-400">Your AI Agents</span>
+   532→   532→            </h1>
+   533→   533→            <p className="text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+   534→   534→              Create a MemBox in seconds. Get an API endpoint and token.
+   535→   535→              Upload documents, store memories, and let your AI agents access it all via a simple REST API.
+   536→   536→            </p>
+   537→   537→            <div className="max-w-md mx-auto">
+   538→   538→              <div className="flex gap-2">
+   539→   539→                <Input
+   540→   540→                  placeholder="Enter your User ID (any name)"
+   541→   541→                  value={userIdInput}
+   542→   542→                  onChange={(e) => setUserIdInput(e.target.value)}
+   543→   543→                  onKeyDown={(e) => e.key === 'Enter' && handleSetUserId()}
+   544→   544→                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-11"
+   545→   545→                />
+   546→   546→                <Button onClick={handleSetUserId} className="bg-emerald-500 hover:bg-emerald-600 text-white h-11 px-6">
+   547→   547→                  Get Started <ChevronRight className="h-4 w-4 ml-1" />
+   548→   548→                </Button>
+   549→   549→              </div>
+   550→   550→              <p className="text-xs text-zinc-500 mt-3">Pick any unique ID — no account needed. It saves locally in your browser.</p>
+   551→   551→            </div>
+   552→   552→          </section>
+   553→   553→
+   554→   554→          <section className="max-w-5xl mx-auto px-4 sm:px-6 pb-24">
+   555→   555→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   556→   556→              {[
+   557→   557→                { icon: Zap, title: 'Instant Setup', desc: 'Create a MemBox and get your API endpoint + token in under 2 seconds. No signup, no waiting.' },
+   558→   558→                { icon: Terminal, title: 'REST API', desc: 'Simple PUT/GET/DELETE on any path. Works with curl, Python, Node.js, or any HTTP client your agent uses.' },
+   559→   559→                { icon: Shield, title: 'Token Auth', desc: 'Each MemBox gets a unique secret token. Only you (and your tools) can read and write to your memories.' },
+   560→   560→                { icon: Upload, title: 'File Upload', desc: 'Upload PDFs, Word docs, Excel sheets, images, code, archives — any file up to 500 MB. Organize in folders.' },
+   561→   561→                { icon: HardDrive, title: 'Unlimited Storage', desc: 'No storage limits. Store as many memories, keys, and files as you need. Completely free forever.' },
+   562→   562→                { icon: FolderOpen, title: 'Path-Based', desc: 'Organize memories in any folder structure. Use paths like project/context, agent/state, or docs/reports.' },
+   563→   563→              ].map((f) => (
+   564→   564→                <Card key={f.title} className="bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-colors">
+   565→   565→                  <CardHeader className="pb-3">
+   566→   566→                    <div className="flex items-center gap-2 mb-1">
+   567→   567→                      <f.icon className="h-4 w-4 text-emerald-400" />
+   568→   568→                      <CardTitle className="text-sm font-semibold">{f.title}</CardTitle>
+   569→   569→                    </div>
+   570→   570→                  </CardHeader>
+   571→   571→                  <CardContent>
+   572→   572→                    <CardDescription className="text-sm text-zinc-400 leading-relaxed">{f.desc}</CardDescription>
+   573→   573→                  </CardContent>
+   574→   574→                </Card>
+   575→   575→              ))}
+   576→   576→            </div>
+   577→   577→
+   578→   578→            {/* Supported file types */}
+   579→   579→            <div className="mt-16 text-center">
+   580→   580→              <h3 className="text-lg font-semibold mb-4">Upload Any Document Type</h3>
+   581→   581→              <div className="flex flex-wrap justify-center gap-2">
+   582→   582→                {['PDF', 'Word', 'Excel', 'PowerPoint', 'CSV', 'JSON', 'YAML', 'Markdown', 'Images', 'Audio', 'Video', 'Archives', 'Code Files', 'Parquet', 'ONNX'].map((t) => (
+   583→   583→                  <Badge key={t} variant="secondary" className="bg-zinc-900 text-zinc-400 border-zinc-800 text-xs">{t}</Badge>
+   584→   584→                ))}
+   585→   585→              </div>
+   586→   586→            </div>
+   587→   587→          </section>
+   588→   588→        </main>
+   589→   589→
+   590→   590→        <footer className="border-t border-zinc-800/60 py-6">
+   591→   591→          <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between text-xs text-zinc-500">
+   592→   592→            <span>MemBox — Free &amp; Open Memory for AI Agents</span>
+   593→   593→            <span>No tracking. No limits. No cost.</span>
+   594→   594→          </div>
+   595→   595→        </footer>
+   596→   596→      </div>
+   597→   597→    )
+   598→   598→  }
+   599→   599→
+   600→   600→  // ─── Logged in — dashboard ─────────────────────────────
+   601→   601→  const activeBox = selectedBox
+   602→   602→  const snippets = activeBox ? generateCodeSnippets(activeBox) : null
+   603→   603→
+   604→   604→  return (
+   605→   605→    <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
+   606→   606→      <header className="border-b border-zinc-800/60 sticky top-0 bg-zinc-950/95 backdrop-blur-sm z-50">
+   607→   607→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+   608→   608→          <div className="flex items-center gap-3">
+   609→   609→            <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setSelectedBox(null); fetchBoxes() }}>
+   610→   610→              <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+   611→   611→                <Brain className="h-4 w-4 text-emerald-400" />
+   612→   612→              </div>
+   613→   613→              <span className="font-semibold text-lg tracking-tight">MemBox</span>
+   614→   614→            </div>
+   615→   615→          </div>
+   616→   616→          <div className="flex items-center gap-3">
+   617→   617→            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800">
+   618→   618→              <div className="h-5 w-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] font-bold text-emerald-400">
+   619→   619→                {userId.charAt(0).toUpperCase()}
+   620→   620→              </div>
+   621→   621→              <span className="text-xs text-zinc-300 font-mono">{userId}</span>
+   622→   622→            </div>
+   623→   623→            <Button
+   624→   624→              variant="ghost" size="sm"
+   625→   625→              onClick={() => { setUserIdState(''); setUserIdInput(''); setBoxes([]); setSelectedBox(null); localStorage.removeItem('membox-user-id') }}
+   626→   626→              className="text-zinc-400 hover:text-zinc-200 text-xs"
+   627→   627→            >
+   628→   628→              Switch User
+   629→   629→            </Button>
+   630→   630→          </div>
+   631→   631→        </div>
+   632→   632→      </header>
+   633→   633→
+   634→   634→      <main className="flex-1">
+   635→   635→        {!activeBox ? (
+   636→   636→          /* ─── Box List View ─── */
+   637→   637→          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+   638→   638→            <Card className="bg-zinc-900/50 border-zinc-800 mb-8">
+   639→   639→              <CardHeader className="pb-4">
+   640→   640→                <CardTitle className="text-lg flex items-center gap-2">
+   641→   641→                  <Plus className="h-5 w-5 text-emerald-400" />
+   642→   642→                  Create a New MemBox
+   643→   643→                </CardTitle>
+   644→   644→                <CardDescription>Give your MemBox a name. You&apos;ll get a unique API endpoint and token instantly.</CardDescription>
+   645→   645→              </CardHeader>
+   646→   646→              <CardContent>
+   647→   647→                <div className="flex gap-3">
+   648→   648→                  <Input
+   649→   649→                    placeholder="e.g. my-claude-agent, project-alpha, research-notes"
+   650→   650→                    value={boxName}
+   651→   651→                    onChange={(e) => setBoxName(e.target.value)}
+   652→   652→                    onKeyDown={(e) => e.key === 'Enter' && handleCreateBox()}
+   653→   653→                    className="bg-zinc-950 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+   654→   654→                  />
+   655→   655→                  <Button onClick={handleCreateBox} disabled={!boxName.trim()} className="bg-emerald-500 hover:bg-emerald-600 text-white whitespace-nowrap">
+   656→   656→                    <Plus className="h-4 w-4 mr-1" /> Create
+   657→   657→                  </Button>
+   658→   658→                </div>
+   659→   659→              </CardContent>
+   660→   660→            </Card>
+   661→   661→
+   662→   662→            <div className="flex items-center justify-between mb-4">
+   663→   663→              <h2 className="text-sm font-medium text-zinc-400">Your MemBoxes ({boxes.length})</h2>
+   664→   664→            </div>
+   665→   665→
+   666→   666→            {loading ? (
+   667→   667→              <div className="text-center py-12 text-zinc-500">Loading...</div>
+   668→   668→            ) : boxes.length === 0 ? (
+   669→   669→              <Card className="bg-zinc-900/30 border-zinc-800/50 border-dashed">
+   670→   670→                <CardContent className="py-12 text-center">
+   671→   671→                  <Box className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
+   672→   672→                  <p className="text-zinc-500 text-sm">No MemBoxes yet. Create your first one above.</p>
+   673→   673→                </CardContent>
+   674→   674→              </Card>
+   675→   675→            ) : (
+   676→   676→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   677→   677→                {boxes.map((box) => (
+   678→   678→                  <Card
+   679→   679→                    key={box.id}
+   680→   680→                    className="bg-zinc-900/50 border-zinc-800 hover:border-emerald-500/30 transition-all cursor-pointer group"
+   681→   681→                    onClick={() => handleViewBox(box)}
+   682→   682→                  >
+   683→   683→                    <CardHeader className="pb-3">
+   684→   684→                      <div className="flex items-start justify-between">
+   685→   685→                        <div className="flex items-center gap-2">
+   686→   686→                          <div className="h-8 w-8 rounded-md bg-emerald-500/10 flex items-center justify-center">
+   687→   687→                            <Box className="h-4 w-4 text-emerald-400" />
+   688→   688→                          </div>
+   689→   689→                          <CardTitle className="text-sm font-semibold">{box.name}</CardTitle>
+   690→   690→                        </div>
+   691→   691→                        <Button
+   692→   692→                          variant="ghost" size="sm"
+   693→   693→                          className="h-7 w-7 p-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+   694→   694→                          onClick={(e) => { e.stopPropagation(); handleDeleteBox(box.slug) }}
+   695→   695→                        >
+   696→   696→                          <Trash2 className="h-3.5 w-3.5" />
+   697→   697→                        </Button>
+   698→   698→                      </div>
+   699→   699→                    </CardHeader>
+   700→   700→                    <CardContent className="space-y-3">
+   701→   701→                      <div className="space-y-1.5">
+   702→   702→                        <div className="flex items-center justify-between">
+   703→   703→                          <span className="text-[11px] text-zinc-500">Slug</span>
+   704→   704→                          <code className="text-[11px] text-emerald-400/80 font-mono">{box.slug}</code>
+   705→   705→                        </div>
+   706→   706→                        <div className="flex items-center justify-between">
+   707→   707→                          <span className="text-[11px] text-zinc-500">Files</span>
+   708→   708→                          <span className="text-[11px] text-zinc-400">{box.fileCount || 0}</span>
+   709→   709→                        </div>
+   710→   710→                        <div className="flex items-center justify-between">
+   711→   711→                          <span className="text-[11px] text-zinc-500">Size</span>
+   712→   712→                          <span className="text-[11px] text-zinc-400">{formatBytes(box.totalSize || 0)}</span>
+   713→   713→                        </div>
+   714→   714→                        <div className="flex items-center justify-between">
+   715→   715→                          <span className="text-[11px] text-zinc-500">Created</span>
+   716→   716→                          <span className="text-[11px] text-zinc-400">{new Date(box.createdAt).toLocaleDateString()}</span>
+   717→   717→                        </div>
+   718→   718→                      </div>
+   719→   719→                      <div className="pt-2 border-t border-zinc-800/50 flex items-center gap-1 text-xs text-emerald-400">
+   720→   720→                        View details <ChevronRight className="h-3 w-3" />
+   721→   721→                      </div>
+   722→   722→                    </CardContent>
+   723→   723→                  </Card>
+   724→   724→                ))}
+   725→   725→              </div>
+   726→   726→            )}
+   727→   727→          </div>
+   728→   728→        ) : (
+   729→   729→          /* ─── Box Detail View ─── */
+   730→   730→          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+   731→   731→            <button
+   732→   732→              onClick={() => { setSelectedBox(null); setBoxDetail(null) }}
+   733→   733→              className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200 mb-6 transition-colors"
+   734→   734→            >
+   735→   735→              <ChevronRight className="h-4 w-4 rotate-180" />
+   736→   736→              Back to all MemBoxes
+   737→   737→            </button>
+   738→   738→
+   739→   739→            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   740→   740→              {/* Left Column */}
+   741→   741→              <div className="lg:col-span-1 space-y-4">
+   742→   742→                {/* Box Info */}
+   743→   743→                <Card className="bg-zinc-900/50 border-zinc-800">
+   744→   744→                  <CardHeader className="pb-3">
+   745→   745→                    <div className="flex items-center gap-2">
+   746→   746→                      <div className="h-8 w-8 rounded-md bg-emerald-500/10 flex items-center justify-center">
+   747→   747→                        <Box className="h-4 w-4 text-emerald-400" />
+   748→   748→                      </div>
+   749→   749→                      <CardTitle className="text-base">{activeBox.name}</CardTitle>
+   750→   750→                    </div>
+   751→   751→                  </CardHeader>
+   752→   752→                  <CardContent className="space-y-3">
+   753→   753→                    <div className="space-y-2">
+   754→   754→                      <div>
+   755→   755→                        <Label className="text-[11px] text-zinc-500 uppercase tracking-wider">Endpoint</Label>
+   756→   756→                        <div className="flex items-center gap-1 mt-1">
+   757→   757→                          <code className="text-xs text-emerald-400/80 font-mono bg-zinc-950 px-2 py-1 rounded flex-1 truncate">
+   758→   758→                            {getBaseUrl()}/api/m/{activeBox.slug}/...
+   759→   759→                          </code>
+   760→   760→                          <CopyButton text={`${getBaseUrl()}/api/m/${activeBox.slug}/`} />
+   761→   761→                        </div>
+   762→   762→                      </div>
+   763→   763→                      <div>
+   764→   764→                        <Label className="text-[11px] text-zinc-500 uppercase tracking-wider">Token</Label>
+   765→   765→                        <div className="flex items-center gap-1 mt-1">
+   766→   766→                          <code className="text-xs text-amber-400/80 font-mono bg-zinc-950 px-2 py-1 rounded flex-1 truncate">
+   767→   767→                            {showToken[activeBox.id] ? activeBox.token : '••••••••••••••••••••' + activeBox.token.slice(-6)}
+   768→   768→                          </code>
+   769→   769→                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowToken((p) => ({ ...p, [activeBox.id]: !p[activeBox.id] }))}>
+   770→   770→                            <Eye className="h-3 w-3 text-zinc-500" />
+   771→   771→                          </Button>
+   772→   772→                          <CopyButton text={activeBox.token} />
+   773→   773→                        </div>
+   774→   774→                      </div>
+   775→   775→                      <div>
+   776→   776→                        <Label className="text-[11px] text-zinc-500 uppercase tracking-wider">Slug</Label>
+   777→   777→                        <div className="flex items-center gap-1 mt-1">
+   778→   778→                          <code className="text-xs text-zinc-400 font-mono bg-zinc-950 px-2 py-1 rounded flex-1 truncate">{activeBox.slug}</code>
+   779→   779→                          <CopyButton text={activeBox.slug} />
+   780→   780→                        </div>
+   781→   781→                      </div>
+   782→   782→                    </div>
+   783→   783→                  </CardContent>
+   784→   784→                </Card>
+   785→   785→
+   786→   786→                {/* File Upload Zone */}
+   787→   787→                <Card className="bg-zinc-900/50 border-zinc-800">
+   788→   788→                  <CardHeader className="pb-3">
+   789→   789→                    <CardTitle className="text-sm flex items-center gap-2">
+   790→   790→                      <Upload className="h-4 w-4 text-emerald-400" />
+   791→   791→                      Upload Files
+   792→   792→                    </CardTitle>
+   793→   793→                    <CardDescription className="text-xs">
+   794→   794→                      PDF, Word, Excel, images, code, archives — up to 500 MB each
+   795→   795→                    </CardDescription>
+   796→   796→                  </CardHeader>
+   797→   797→                  <CardContent className="space-y-3">
+   798→   798→                    <div className="flex gap-2">
+   799→   799→                      <Input
+   800→   800→                        placeholder="Folder (e.g. docs, uploads, data)"
+   801→   801→                        value={uploadFolder}
+   802→   802→                        onChange={(e) => setUploadFolder(e.target.value)}
+   803→   803→                        className="bg-zinc-950 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 text-xs h-8"
+   804→   804→                      />
+   805→   805→                    </div>
+   806→   806→                    <div
+   807→   807→                      className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
+   808→   808→                        dragOver ? 'border-emerald-400 bg-emerald-500/5' : 'border-zinc-700 hover:border-zinc-600'
+   809→   809→                      }`}
+   810→   810→                      onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+   811→   811→                      onDragLeave={() => setDragOver(false)}
+   812→   812→                      onDrop={handleDrop}
+   813→   813→                      onClick={() => fileInputRef.current?.click()}
+   814→   814→                    >
+   815→   815→                      <input
+   816→   816→                        ref={fileInputRef}
+   817→   817→                        type="file"
+   818→   818→                        multiple
+   819→   819→                        className="hidden"
+   820→   820→                        onChange={(e) => e.target.files && uploadFiles(e.target.files)}
+   821→   821→                      />
+   822→   822→                      {uploading ? (
+   823→   823→                        <div className="flex flex-col items-center gap-2">
+   824→   824→                          <div className="h-8 w-8 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" />
+   825→   825→                          <span className="text-xs text-zinc-400">Uploading...</span>
+   826→   826→                        </div>
+   827→   827→                      ) : (
+   828→   828→                        <div className="flex flex-col items-center gap-2">
+   829→   829→                          <Upload className={`h-6 w-6 ${dragOver ? 'text-emerald-400' : 'text-zinc-500'}`} />
+   830→   830→                          <p className="text-xs text-zinc-400">
+   831→   831→                            <span className="text-emerald-400 font-medium">Click to browse</span> or drag &amp; drop files here
+   832→   832→                          </p>
+   833→   833→                        </div>
+   834→   834→                      )}
+   835→   835→                    </div>
+   836→   836→                    {uploadResults.length > 0 && (
+   837→   837→                      <div className="space-y-1 max-h-32 overflow-y-auto">
+   838→   838→                        {uploadResults.map((r, i) => (
+   839→   839→                          <div key={i} className="flex items-center gap-2 text-xs px-2 py-1 rounded bg-zinc-950">
+   840→   840→                            {'error' in r ? (
+   841→   841→                              <X className="h-3 w-3 text-red-400 shrink-0" />
+   842→   842→                            ) : (
+   843→   843→                              <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+   844→   844→                            )}
+   845→   845→                            <span className="text-zinc-300 truncate flex-1 font-mono">{r.name}</span>
+   846→   846→                            {r.size && <span className="text-zinc-500 shrink-0">{formatBytes(r.size)}</span>}
+   847→   847→                          </div>
+   848→   848→                        ))}
+   849→   849→                      </div>
+   850→   850→                    )}
+   851→   851→                  </CardContent>
+   852→   852→                </Card>
+   853→   853→
+   854→   854→                {/* Stats */}
+   855→   855→                <Card className="bg-zinc-900/50 border-zinc-800">
+   856→   856→                  <CardHeader className="pb-3">
+   857→   857→                    <CardTitle className="text-sm">Stats</CardTitle>
+   858→   858→                  </CardHeader>
+   859→   859→                  <CardContent>
+   860→   860→                    <div className="grid grid-cols-2 gap-3">
+   861→   861→                      <div className="bg-zinc-950 rounded-lg p-3 text-center">
+   862→   862→                        <div className="text-xl font-bold text-emerald-400">{boxDetail?.fileCount || 0}</div>
+   863→   863→                        <div className="text-[11px] text-zinc-500">Items</div>
+   864→   864→                      </div>
+   865→   865→                      <div className="bg-zinc-950 rounded-lg p-3 text-center">
+   866→   866→                        <div className="text-xl font-bold text-emerald-400">{formatBytes(boxDetail?.totalSize || 0)}</div>
+   867→   867→                        <div className="text-[11px] text-zinc-500">Total Size</div>
+   868→   868→                      </div>
+   869→   869→                    </div>
+   870→   870→                  </CardContent>
+   871→   871→                </Card>
+   872→   872→
+   873→   873→                {/* Stored Files Tree */}
+   874→   874→                <Card className="bg-zinc-900/50 border-zinc-800">
+   875→   875→                  <CardHeader className="pb-3">
+   876→   876→                    <CardTitle className="text-sm flex items-center gap-2">
+   877→   877→                      <FolderOpen className="h-4 w-4 text-zinc-400" />
+   878→   878→                      Stored Items
+   879→   879→                    </CardTitle>
+   880→   880→                  </CardHeader>
+   881→   881→                  <CardContent>
+   882→   882→                    {detailLoading ? (
+   883→   883→                      <div className="text-center py-4 text-zinc-500 text-sm">Loading...</div>
+   884→   884→                    ) : (
+   885→   885→                      <div className="max-h-72 overflow-y-auto">
+   886→   886→                        <StorageTree files={boxDetail?.files} slug={activeBox.slug} token={activeBox.token} />
+   887→   887→                      </div>
+   888→   888→                    )}
+   889→   889→                  </CardContent>
+   890→   890→                </Card>
+   891→   891→
+   892→   892→                {/* Danger Zone */}
+   893→   893→                <Button variant="destructive" className="w-full" onClick={() => handleDeleteBox(activeBox.slug)}>
+   894→   894→                  <Trash2 className="h-4 w-4 mr-2" /> Delete This MemBox
+   895→   895→                </Button>
+   896→   896→              </div>
+   897→   897→
+   898→   898→              {/* Right Column — Code Snippets & API Ref */}
+   899→   899→              <div className="lg:col-span-2">
+   900→   900→                <Card className="bg-zinc-900/50 border-zinc-800">
+   901→   901→                  <CardHeader>
+   902→   902→                    <CardTitle className="text-base flex items-center gap-2">
+   903→   903→                      <Terminal className="h-4 w-4 text-emerald-400" />
+   904→   904→                      API Usage
+   905→   905→                    </CardTitle>
+   906→   906→                    <CardDescription>
+   907→   907→                      Copy these snippets into your coding tools, agents, or scripts. Supports text memory + file upload/download.
+   908→   908→                    </CardDescription>
+   909→   909→                  </CardHeader>
+   910→   910→                  <CardContent>
+   911→   911→                    <Tabs defaultValue="curl" className="w-full">
+   912→   912→                      <TabsList className="bg-zinc-950 border-zinc-800 w-full justify-start">
+   913→   913→                        <TabsTrigger value="curl" className="text-xs">curl</TabsTrigger>
+   914→   914→                        <TabsTrigger value="python" className="text-xs">Python</TabsTrigger>
+   915→   915→                        <TabsTrigger value="node" className="text-xs">Node.js</TabsTrigger>
+   916→   916→                        <TabsTrigger value="mcp" className="text-xs">MCP / Agent</TabsTrigger>
+   917→   917→                      </TabsList>
+   918→   918→                      <TabsContent value="curl" className="mt-4"><CodeBlock code={snippets?.curl || ''} language="bash" /></TabsContent>
+   919→   919→                      <TabsContent value="python" className="mt-4"><CodeBlock code={snippets?.python || ''} language="python" /></TabsContent>
+   920→   920→                      <TabsContent value="node" className="mt-4"><CodeBlock code={snippets?.node || ''} language="javascript" /></TabsContent>
+   921→   921→                      <TabsContent value="mcp" className="mt-4"><CodeBlock code={snippets?.mcp || ''} language="text" /></TabsContent>
+   922→   922→                    </Tabs>
+   923→   923→                  </CardContent>
+   924→   924→                </Card>
+   925→   925→
+   926→   926→                {/* API Reference */}
+   927→   927→                <Card className="bg-zinc-900/50 border-zinc-800 mt-6">
+   928→   928→                  <CardHeader>
+   929→   929→                    <CardTitle className="text-base flex items-center gap-2">
+   930→   930→                      <Key className="h-4 w-4 text-emerald-400" />
+   931→   931→                      API Reference
+   932→   932→                    </CardTitle>
+   933→   933→                  </CardHeader>
+   934→   934→                  <CardContent>
+   935→   935→                    <div className="space-y-3">
+   936→   936→                      {[
+   937→   937→                        { method: 'GET', path: '/api/m/{slug}', desc: 'List all stored memories and files', color: 'text-emerald-400' },
+   938→   938→                        { method: 'GET', path: '/api/m/{slug}/{path}', desc: 'Read a text/JSON memory by path. Auto-parses JSON.', color: 'text-emerald-400' },
+   939→   939→                        { method: 'PUT', path: '/api/m/{slug}/{path}', desc: 'Write (upsert) a text memory. Accepts {content: ...}, {data: ...}, or raw text.', color: 'text-amber-400' },
+   940→   940→                        { method: 'POST', path: '/api/m/{slug}/{path}', desc: 'Append to an existing text memory.', color: 'text-sky-400' },
+   941→   941→                        { method: 'POST', path: '/api/m/{slug}/upload', desc: 'Upload files (multipart form). Field: "files". Optional: "folder". Max 500 MB/file.', color: 'text-violet-400' },
+   942→   942→                        { method: 'GET', path: '/api/m/{slug}/files/{path}', desc: 'Download a file (returns raw bytes with correct MIME type).', color: 'text-emerald-400' },
+   943→   943→                        { method: 'DELETE', path: '/api/m/{slug}/{path}', desc: 'Delete a memory, file, or directory.', color: 'text-red-400' },
+   944→   944→                      ].map((ep) => (
+   945→   945→                        <div key={ep.method + ep.path} className="flex gap-3 items-start">
+   946→   946→                          <span className={`text-xs font-mono font-bold ${ep.color} min-w-[48px] pt-0.5`}>{ep.method}</span>
+   947→   947→                          <div>
+   948→   948→                            <code className="text-xs font-mono text-zinc-300">{ep.path}</code>
+   949→   949→                            <p className="text-xs text-zinc-500 mt-0.5">{ep.desc}</p>
+   950→   950→                          </div>
+   951→   951→                        </div>
+   952→   952→                      ))}
+   953→   953→
+   954→   954→                      <div className="pt-4 border-t border-zinc-800 space-y-3">
+   955→   955→                        <div>
+   956→   956→                          <h4 className="text-xs font-semibold text-zinc-300 mb-1">Authentication</h4>
+   957→   957→                          <p className="text-xs text-zinc-500 leading-relaxed">
+   958→   958→                            <code className="text-zinc-300">Authorization: Bearer {'<token>'}</code> or <code className="text-zinc-300">X-MemBox-Token</code> header.
+   959→   959→                            For file downloads via browser, use <code className="text-zinc-300">?token={'<token>'}</code> query param.
+   960→   960→                          </p>
+   961→   961→                        </div>
+   962→   962→                        <div>
+   963→   963→                          <h4 className="text-xs font-semibold text-zinc-300 mb-1">Supported Upload Types</h4>
+   964→   964→                          <p className="text-xs text-zinc-500 leading-relaxed">
+   965→   965→                            Documents (.pdf, .doc, .docx, .odt, .rtf, .txt, .md, .csv), Spreadsheets (.xls, .xlsx, .ods),
+   966→   966→                            Presentations (.ppt, .pptx), Images (.png, .jpg, .gif, .webp, .svg), Audio/Video (.mp3, .mp4, .wav, .webm),
+   967→   967→                            Archives (.zip, .tar, .gz), Code files, Data files (.parquet, .onnx, .json, .yaml), and 100+ more.
+   968→   968→                          </p>
+   969→   969→                        </div>
+   970→   970→                      </div>
+   971→   971→                    </div>
+   972→   972→                  </CardContent>
+   973→   973→                </Card>
+   974→   974→              </div>
+   975→   975→            </div>
+   976→   976→          </div>
+   977→   977→        )}
+   978→   978→      </main>
+   979→   979→
+   980→   980→      <footer className="border-t border-zinc-800/60 py-6 mt-auto">
+   981→   981→        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between text-xs text-zinc-500">
+   982→   982→          <span>MemBox — Free &amp; Open Memory for AI Agents</span>
+   983→   983→          <span>No tracking. No limits. No cost.</span>
+   984→   984→        </div>
+   985→   985→      </footer>
+   986→   986→      <Toaster richColors position="bottom-right" />
+   987→   987→    </div>
+   988→   988→  )
+   989→   989→}
+   990→   990→
