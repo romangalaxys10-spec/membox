@@ -13,7 +13,7 @@ import {
   HardDrive, Terminal, ChevronRight, Box, FileText, Folder, Eye,
   Upload, Download, File, FileSpreadsheet, FileImage, FileCode,
   FileArchive, X, ArrowRight, LogIn, Sparkles, ExternalLink,
-  AlertTriangle, Cpu,
+  AlertTriangle, Cpu, UserPlus,
 } from 'lucide-react'
 
 /* ── Types ────────────────────────────────────── */
@@ -285,6 +285,7 @@ export default function Home() {
   const [loginLoading, setLoginLoading] = useState(false)
   const [registerLoading, setRegisterLoading] = useState(false)
   const [createBoxLoading, setCreateBoxLoading] = useState(false)
+  const [loginTab, setLoginTab] = useState<'login' | 'signup'>('login')
 
   useEffect(() => {
     const saved = getStoredUserId()
@@ -619,58 +620,104 @@ TOKEN = "${t}"
   }
 
   /* ════════════════════════════════════════════════
-     VIEW: LOGIN
+     VIEW: LOGIN / SIGN UP
      ════════════════════════════════════════════════ */
   if (view === 'login') {
     return (
       <div className="min-h-screen flex flex-col bg-[#09090b] text-zinc-100">
         {nav}
-        <main className="flex-1 flex items-center justify-center p-4">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-emerald-500/[0.02] blur-3xl" />
-        <div className="relative w-full max-w-sm fade-in-up">
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-8">
-            <div className="text-center mb-8">
-              <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4 border border-emerald-500/10">
-                <LogIn className="h-5 w-5 text-emerald-400" />
+        <main className="flex-1 flex items-center justify-center p-4 relative">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-emerald-500/[0.02] blur-3xl" />
+          <div className="relative w-full max-w-sm fade-in-up">
+            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
+              {/* Tab switcher */}
+              <div className="flex border-b border-white/[0.06]">
+                <button
+                  onClick={() => setLoginTab('login')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-medium transition-colors relative ${loginTab === 'login' ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-400'}`}
+                >
+                  <LogIn className="h-4 w-4" />
+                  Log In
+                  {loginTab === 'login' && <div className="absolute bottom-0 left-3 right-3 h-0.5 bg-emerald-500 rounded-full" />}
+                </button>
+                <button
+                  onClick={() => setLoginTab('signup')}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-medium transition-colors relative ${loginTab === 'signup' ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-400'}`}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Sign Up
+                  {loginTab === 'signup' && <div className="absolute bottom-0 left-3 right-3 h-0.5 bg-emerald-500 rounded-full" />}
+                </button>
               </div>
-              <h2 className="text-xl font-bold tracking-tight">Welcome back</h2>
-              <p className="text-sm text-zinc-500 mt-1">Enter your username and login token to access your MemBoxes.</p>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <Label className="text-xs text-zinc-500">Username</Label>
-                <Input
-                  placeholder="your-username"
-                  value={loginUsernameInput}
-                  onChange={(e) => setLoginUsernameInput(e.target.value)}
-                  className="mt-1.5 bg-white/[0.04] border-white/[0.08] text-zinc-100 placeholder:text-zinc-600 h-10 rounded-xl"
-                />
+
+              <div className="p-8">
+                {loginTab === 'login' ? (
+                  <>
+                    <div className="text-center mb-6">
+                      <div className="h-11 w-11 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-3 border border-emerald-500/10">
+                        <LogIn className="h-5 w-5 text-emerald-400" />
+                      </div>
+                      <h2 className="text-lg font-bold tracking-tight">Welcome back</h2>
+                      <p className="text-xs text-zinc-500 mt-1">Enter your credentials to access your MemBoxes.</p>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-xs text-zinc-500">Username</Label>
+                        <Input
+                          placeholder="your-username"
+                          value={loginUsernameInput}
+                          onChange={(e) => setLoginUsernameInput(e.target.value)}
+                          className="mt-1.5 bg-white/[0.04] border-white/[0.08] text-zinc-100 placeholder:text-zinc-600 h-10 rounded-xl"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-zinc-500">Login Token</Label>
+                        <Input
+                          placeholder="login_xxxxxxxxxxxxxxxx"
+                          value={loginTokenInput}
+                          onChange={(e) => setLoginTokenInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                          className="mt-1.5 bg-white/[0.04] border-white/[0.08] text-zinc-100 placeholder:text-zinc-600 h-10 rounded-xl font-mono text-xs"
+                        />
+                      </div>
+                      <Button onClick={handleLogin} disabled={loginLoading || !loginUsernameInput.trim() || !loginTokenInput.trim()} className="w-full bg-zinc-100 text-zinc-950 hover:bg-zinc-200 font-medium h-11 rounded-xl mt-2">
+                        {loginLoading ? 'Logging in...' : 'Log In'}
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-center mb-6">
+                      <div className="h-11 w-11 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-3 border border-emerald-500/10">
+                        <UserPlus className="h-5 w-5 text-emerald-400" />
+                      </div>
+                      <h2 className="text-lg font-bold tracking-tight">Create your account</h2>
+                      <p className="text-xs text-zinc-500 mt-1">Pick a username. You'll get a login token to save offline.</p>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-xs text-zinc-500">Username</Label>
+                        <Input
+                          placeholder="pick-a-username"
+                          value={userIdInput}
+                          onChange={(e) => setUserIdInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
+                          className="mt-1.5 bg-white/[0.04] border-white/[0.08] text-zinc-100 placeholder:text-zinc-600 h-10 rounded-xl"
+                        />
+                      </div>
+                      <Button onClick={handleRegister} disabled={registerLoading || !userIdInput.trim()} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium h-11 rounded-xl">
+                        {registerLoading ? <div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <>Sign Up <ChevronRight className="h-4 w-4 ml-1" /></>}
+                      </Button>
+                      <p className="text-[11px] text-zinc-600 leading-relaxed text-center">You'll receive a login token on the next screen. <span className="text-amber-400/80">Save it offline</span> — there's no password recovery.</p>
+                    </div>
+                  </>
+                )}
               </div>
-              <div>
-                <Label className="text-xs text-zinc-500">Login Token</Label>
-                <Input
-                  placeholder="login_xxxxxxxxxxxxxxxx"
-                  value={loginTokenInput}
-                  onChange={(e) => setLoginTokenInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                  className="mt-1.5 bg-white/[0.04] border-white/[0.08] text-zinc-100 placeholder:text-zinc-600 h-10 rounded-xl font-mono text-xs"
-                />
-              </div>
-              <Button onClick={handleLogin} disabled={loginLoading || !loginUsernameInput.trim() || !loginTokenInput.trim()} className="w-full bg-zinc-100 text-zinc-950 hover:bg-zinc-200 font-medium h-11 rounded-xl mt-2">
-                {loginLoading ? 'Logging in...' : 'Log In'}
-              </Button>
-            </div>
-            <div className="mt-6 pt-5 border-t border-white/[0.06]">
-              <button onClick={() => { setView('landing'); setUserIdInput('') }} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/15 transition-colors">
-                <Zap className="h-3.5 w-3.5" />
-                Don't have an account? Sign Up
-              </button>
             </div>
           </div>
-        </div>
-      </main>
-      <CreditFooter />
-      <Toaster richColors position="bottom-right" />
+        </main>
+        <CreditFooter />
+        <Toaster richColors position="bottom-right" />
       </div>
     )
   }
