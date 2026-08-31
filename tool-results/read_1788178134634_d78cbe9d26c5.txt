@@ -1,0 +1,853 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState, useCallback, useEffect } from 'react'
+     4→     4→import { Button } from '@/components/ui/button'
+     5→     5→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+     6→     6→import { Input } from '@/components/ui/input'
+     7→     7→import { Label } from '@/components/ui/label'
+     8→     8→import { Badge } from '@/components/ui/badge'
+     9→     9→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    10→    10→
+    11→    11→import { Toaster, toast } from 'sonner'
+    12→    12→import {
+    13→    13→  Brain,
+    14→    14→  Plus,
+    15→    15→  Copy,
+    16→    16→  Check,
+    17→    17→  Trash2,
+    18→    18→  Key,
+    19→    19→  FolderOpen,
+    20→    20→  Zap,
+    21→    21→  Shield,
+    22→    22→  HardDrive,
+    23→    23→  Terminal,
+    24→    24→  ChevronRight,
+    25→    25→  Box,
+    26→    26→  FileText,
+    27→    27→  Folder,
+    28→    28→  Eye,
+    29→    29→} from 'lucide-react'
+    30→    30→
+    31→    31→interface MemBox {
+    32→    32→  id: string
+    33→    33→  slug: string
+    34→    34→  name: string
+    35→    35→  token: string
+    36→    36→  userId: string
+    37→    37→  createdAt: string
+    38→    38→  fileCount?: number
+    39→    39→  totalSize?: number
+    40→    40→  files?: { name: string; type: 'file' | 'directory'; size?: number; modified?: string }[]
+    41→    41→}
+    42→    42→
+    43→    43→function getUserId() {
+    44→    44→  if (typeof window === "undefined") return ""
+    45→    45→  return localStorage.getItem('membox-user-id') || ''
+    46→    46→}
+    47→    47→
+    48→    48→function setUserId(id: string) {
+    49→    49→  localStorage.setItem('membox-user-id', id)
+    50→    50→}
+    51→    51→
+    52→    52→function CopyButton({ text, label }: { text: string; label?: string }) {
+    53→    53→  const [copied, setCopied] = useState(false)
+    54→    54→  const handleCopy = async () => {
+    55→    55→    await navigator.clipboard.writeText(text)
+    56→    56→    setCopied(true)
+    57→    57→    setTimeout(() => setCopied(false), 2000)
+    58→    58→  }
+    59→    59→  return (
+    60→    60→    <Button
+    61→    61→      variant="ghost"
+    62→    62→      size="sm"
+    63→    63→      onClick={handleCopy}
+    64→    64→      className="h-7 gap-1.5 text-xs"
+    65→    65→    >
+    66→    66→      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+    67→    67→      {label || (copied ? 'Copied' : 'Copy')}
+    68→    68→    </Button>
+    69→    69→  )
+    70→    70→}
+    71→    71→
+    72→    72→function formatBytes(bytes: number): string {
+    73→    73→  if (bytes === 0) return '0 B'
+    74→    74→  const k = 1024
+    75→    75→  const sizes = ['B', 'KB', 'MB', 'GB']
+    76→    76→  const i = Math.floor(Math.log(bytes) / Math.log(k))
+    77→    77→  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+    78→    78→}
+    79→    79→
+    80→    80→function CodeBlock({ code, language }: { code: string; language?: string }) {
+    81→    81→  return (
+    82→    82→    <div className="relative group rounded-lg bg-zinc-950 border border-zinc-800 overflow-hidden">
+    83→    83→      <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/80 border-b border-zinc-800">
+    84→    84→        <span className="text-xs text-zinc-400 font-mono">{language || 'plaintext'}</span>
+    85→    85→        <CopyButton text={code} />
+    86→    86→      </div>
+    87→    87→      <pre className="p-4 overflow-x-auto text-sm leading-relaxed">
+    88→    88→        <code className="text-zinc-300 font-mono whitespace-pre">{code}</code>
+    89→    89→      </pre>
+    90→    90→    </div>
+    91→    91→  )
+    92→    92→}
+    93→    93→
+    94→    94→function StorageTree({ files, slug, token }: { files: MemBox['files']; slug: string; token: string }) {
+    95→    95→  if (!files || files.length === 0) {
+    96→    96→    return <p className="text-sm text-zinc-500 py-4 text-center">No files yet. Use the API to store memories.</p>
+    97→    97→  }
+    98→    98→  return (
+    99→    99→    <div className="space-y-1">
+   100→   100→      {files.map((f) => (
+   101→   101→        <div key={f.name} className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-zinc-800/50 text-sm">
+   102→   102→          {f.type === 'directory' ? (
+   103→   103→            <Folder className="h-4 w-4 text-amber-400" />
+   104→   104→          ) : (
+   105→   105→            <FileText className="h-4 w-4 text-zinc-400" />
+   106→   106→          )}
+   107→   107→          <span className="flex-1 text-zinc-300 font-mono text-xs">{f.name}</span>
+   108→   108→          {f.type === 'file' && f.size !== undefined && (
+   109→   109→            <span className="text-xs text-zinc-500">{formatBytes(f.size!)}</span>
+   110→   110→          )}
+   111→   111→          {f.modified && (
+   112→   112→            <span className="text-xs text-zinc-600">
+   113→   113→              {new Date(f.modified).toLocaleDateString()}
+   114→   114→            </span>
+   115→   115→          )}
+   116→   116→        </div>
+   117→   117→      ))}
+   118→   118→    </div>
+   119→   119→  )
+   120→   120→}
+   121→   121→
+   122→   122→export default function Home() {
+   123→   123→  const [userId, setUserIdState] = useState('')
+   124→   124→  const [userIdInput, setUserIdInput] = useState('')
+   125→   125→  const [boxes, setBoxes] = useState<MemBox[]>([])
+   126→   126→  const [loading, setLoading] = useState(false)
+   127→   127→  const [boxName, setBoxName] = useState('')
+   128→   128→  const [selectedBox, setSelectedBox] = useState<MemBox | null>(null)
+   129→   129→  const [boxDetail, setBoxDetail] = useState<MemBox | null>(null)
+   130→   130→  const [detailLoading, setDetailLoading] = useState(false)
+   131→   131→  const [showToken, setShowToken] = useState<Record<string, boolean>>({})
+   132→   132→
+   133→   133→  useEffect(() => {
+   134→   134→    const saved = getUserId()
+   135→   135→    if (saved) {
+   136→   136→      setUserIdState(saved)
+   137→   137→      setUserIdInput(saved)
+   138→   138→      fetchBoxes(saved)
+   139→   139→    }
+   140→   140→  }, [])
+   141→   141→
+   142→   142→  const fetchBoxes = useCallback(async (uid?: string) => {
+   143→   143→    const id = uid || userId
+   144→   144→    if (!id) return
+   145→   145→    setLoading(true)
+   146→   146→    try {
+   147→   147→      const res = await fetch(`/api/boxes?userId=${encodeURIComponent(id)}`)
+   148→   148→      const data = await res.json()
+   149→   149→      if (data.boxes) setBoxes(data.boxes)
+   150→   150→    } catch {
+   151→   151→      toast.error('Failed to load MemBoxes')
+   152→   152→    } finally {
+   153→   153→      setLoading(false)
+   154→   154→    }
+   155→   155→  }, [userId])
+   156→   156→
+   157→   157→  const handleSetUserId = () => {
+   158→   158→    const id = userIdInput.trim()
+   159→   159→    if (!id) {
+   160→   160→      toast.error('Please enter a User ID')
+   161→   161→      return
+   162→   162→    }
+   163→   163→    setUserIdState(id)
+   164→   164→    setUserId(id)
+   165→   165→    setBoxes([])
+   166→   166→    setSelectedBox(null)
+   167→   167→    fetchBoxes(id)
+   168→   168→    toast.success(`Welcome, ${id}!`)
+   169→   169→  }
+   170→   170→
+   171→   171→  const handleCreateBox = async () => {
+   172→   172→    if (!boxName.trim()) {
+   173→   173→      toast.error('Please enter a name for your MemBox')
+   174→   174→      return
+   175→   175→    }
+   176→   176→    try {
+   177→   177→      const res = await fetch('/api/boxes', {
+   178→   178→        method: 'POST',
+   179→   179→        headers: { 'Content-Type': 'application/json' },
+   180→   180→        body: JSON.stringify({ name: boxName.trim(), userId }),
+   181→   181→      })
+   182→   182→      const data = await res.json()
+   183→   183→      if (data.error) {
+   184→   184→        toast.error(data.error)
+   185→   185→        return
+   186→   186→      }
+   187→   187→      setBoxName('')
+   188→   188→      toast.success('MemBox created!')
+   189→   189→      fetchBoxes()
+   190→   190→    } catch {
+   191→   191→      toast.error('Failed to create MemBox')
+   192→   192→    }
+   193→   193→  }
+   194→   194→
+   195→   195→  const handleDeleteBox = async (slug: string) => {
+   196→   196→    if (!confirm('Delete this MemBox and all its stored memories?')) return
+   197→   197→    try {
+   198→   198→      await fetch(`/api/boxes/${slug}`, { method: 'DELETE' })
+   199→   199→      if (selectedBox?.slug === slug) setSelectedBox(null)
+   200→   200→      toast.success('MemBox deleted')
+   201→   201→      fetchBoxes()
+   202→   202→    } catch {
+   203→   203→      toast.error('Failed to delete MemBox')
+   204→   204→    }
+   205→   205→  }
+   206→   206→
+   207→   207→  const handleViewBox = async (box: MemBox) => {
+   208→   208→    setSelectedBox(box)
+   209→   209→    setDetailLoading(true)
+   210→   210→    try {
+   211→   211→      const res = await fetch(`/api/boxes/${box.slug}`)
+   212→   212→      const data = await res.json()
+   213→   213→      setBoxDetail(data)
+   214→   214→    } catch {
+   215→   215→      toast.error('Failed to load box details')
+   216→   216→    } finally {
+   217→   217→      setDetailLoading(false)
+   218→   218→    }
+   219→   219→  }
+   220→   220→
+   221→   221→  const getBaseUrl = () => {
+   222→   222→    if (typeof window !== 'undefined') {
+   223→   223→      return window.location.origin
+   224→   224→    }
+   225→   225→    return ''
+   226→   226→  }
+   227→   227→
+   228→   228→  const generateCodeSnippets = (box: MemBox) => {
+   229→   229→    const base = getBaseUrl()
+   230→   230→    const slug = box.slug
+   231→   231→    const token = box.token
+   232→   232→
+   233→   233→    return {
+   234→   234→      curl: `# Store a memory
+   235→   235→curl -X PUT "${base}/api/m/${slug}/my-key" \
+   236→   236→  -H "Authorization: Bearer ${token}" \
+   237→   237→  -H "Content-Type: application/json" \
+   238→   238→  -d '{"content": "This is my agent\'s memory"}'
+   239→   239→
+   240→   240→# Read a memory
+   241→   241→curl "${base}/api/m/${slug}/my-key" \
+   242→   242→  -H "Authorization: Bearer ${token}"
+   243→   243→
+   244→   244→# List all memories
+   245→   245→curl "${base}/api/m/${slug}" \
+   246→   246→  -H "Authorization: Bearer ${token}"
+   247→   247→
+   248→   248→# Delete a memory
+   249→   249→curl -X DELETE "${base}/api/m/${slug}/my-key" \
+   250→   250→  -H "Authorization: Bearer ${token}"`,
+   251→   251→
+   252→   252→      python: `import requests
+   253→   253→
+   254→   254→BASE = "${base}"
+   255→   255→SLUG = "${slug}"
+   256→   256→HEADERS = {"Authorization": "Bearer ${token}"}
+   257→   257→
+   258→   258→# Store a memory
+   259→   259→requests.put(
+   260→   260→    f"{BASE}/api/m/{SLUG}/project-context",
+   261→   261→    headers=HEADERS,
+   262→   262→    json={"content": "Working on a React app with TypeScript"}
+   263→   263→)
+   264→   264→
+   265→   265→# Read a memory
+   266→   266→resp = requests.get(f"{BASE}/api/m/{SLUG}/project-context", headers=HEADERS)
+   267→   267→print(resp.json())
+   268→   268→
+   269→   269→# Store structured data
+   270→   270→requests.put(
+   271→   271→    f"{BASE}/api/m/{SLUG}/user-preferences",
+   272→   272→    headers=HEADERS,
+   273→   273→    json={"data": {"theme": "dark", "language": "python"}}
+   274→   274→)
+   275→   275→
+   276→   276→# List all memories
+   277→   277→resp = requests.get(f"{BASE}/api/m/{SLUG}", headers=HEADERS)
+   278→   278→print(resp.json())`,
+   279→   279→
+   280→   280→      node: `const BASE = "${base}";
+   281→   281→const SLUG = "${slug}";
+   282→   282→const HEADERS = { Authorization: "Bearer ${token}" };
+   283→   283→
+   284→   284→// Store a memory
+   285→   285→await fetch(\`\${BASE}/api/m/\${SLUG}/agent-state\`, {
+   286→   286→  method: "PUT",
+   287→   287→  headers: { ...HEADERS, "Content-Type": "application/json" },
+   288→   288→  body: JSON.stringify({ content: "Remember: user prefers functional style" }),
+   289→   289→});
+   290→   290→
+   291→   291→// Read a memory
+   292→   292→const resp = await fetch(\`\${BASE}/api/m/\${SLUG}/agent-state\`, {
+   293→   293→  headers: HEADERS,
+   294→   294→});
+   295→   295→const data = await resp.json();
+   296→   296→console.log(data);
+   297→   297→
+   298→   298→// Store structured JSON
+   299→   299→await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
+   300→   300→  method: "PUT",
+   301→   301→  headers: { ...HEADERS, "Content-Type": "application/json" },
+   302→   302→  body: JSON.stringify({ data: { task: "refactoring", step: 3 } }),
+   303→   303→});`,
+   304→   304→
+   305→   305→      mcp: `# Use as MCP-compatible memory server
+   306→   306→# Add to your Claude Desktop / AI tool config:
+   307→   307→
+   308→   308→# The MemBox API is REST-based and compatible with any tool that can make HTTP requests.
+   309→   309→# Endpoint: ${base}/api/m/${slug}/{path}
+   310→   310→# Auth: Bearer token in Authorization header
+   311→   311→
+   312→   312→# Example tool definition for your agent:
+   313→   313→# {
+   314→   314→#   "name": "membox_store",
+   315→   315→#   "description": "Store a memory in MemBox",
+   316→   316→#   "parameters": {
+   317→   317→#     "path": { "type": "string", "description": "Key path for the memory" },
+   318→   318→#     "content": { "type": "string", "description": "Content to store" }
+   319→   319→#   },
+   320→   320→#   "handler": async (params) => {
+   321→   321→#     return fetch(\"${base}/api/m/${slug}/\" + params.path, {
+   322→   322→#       method: "PUT",
+   323→   323→#       headers: { "Authorization": "Bearer ${token}", "Content-Type": "application/json" },
+   324→   324→#       body: JSON.stringify({ content: params.content })
+   325→   325→#     });
+   326→   326→#   }
+   327→   327→# }`,
+   328→   328→    }
+   329→   329→  }
+   330→   330→
+   331→   331→  // Not logged in state
+   332→   332→  if (!userId) {
+   333→   333→    return (
+   334→   334→      <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
+   335→   335→        {/* Nav */}
+   336→   336→        <header className="border-b border-zinc-800/60">
+   337→   337→          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+   338→   338→            <div className="flex items-center gap-2">
+   339→   339→              <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+   340→   340→                <Brain className="h-4 w-4 text-emerald-400" />
+   341→   341→              </div>
+   342→   342→              <span className="font-semibold text-lg tracking-tight">MemBox</span>
+   343→   343→            </div>
+   344→   344→            <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+   345→   345→              100% Free
+   346→   346→            </Badge>
+   347→   347→          </div>
+   348→   348→        </header>
+   349→   349→
+   350→   350→        {/* Hero */}
+   351→   351→        <main className="flex-1">
+   352→   352→          <section className="max-w-4xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
+   353→   353→            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm mb-8">
+   354→   354→              <Zap className="h-3.5 w-3.5" />
+   355→   355→              No signup. No credit card. No limits.
+   356→   356→            </div>
+   357→   357→            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight mb-6">
+   358→   358→              Live Memory for
+   359→   359→              <br />
+   360→   360→              <span className="text-emerald-400">Your AI Agents</span>
+   361→   361→            </h1>
+   362→   362→            <p className="text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+   363→   363→              Create a MemBox in seconds. Get an API endpoint and token.
+   364→   364→              Let all your coding tools and AI agents use it as persistent live memory.
+   365→   365→            </p>
+   366→   366→            <div className="max-w-md mx-auto">
+   367→   367→              <div className="flex gap-2">
+   368→   368→                <Input
+   369→   369→                  placeholder="Enter your User ID (any name)"
+   370→   370→                  value={userIdInput}
+   371→   371→                  onChange={(e) => setUserIdInput(e.target.value)}
+   372→   372→                  onKeyDown={(e) => e.key === 'Enter' && handleSetUserId()}
+   373→   373→                  className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-11"
+   374→   374→                />
+   375→   375→                <Button
+   376→   376→                  onClick={handleSetUserId}
+   377→   377→                  className="bg-emerald-500 hover:bg-emerald-600 text-white h-11 px-6"
+   378→   378→                >
+   379→   379→                  Get Started
+   380→   380→                  <ChevronRight className="h-4 w-4 ml-1" />
+   381→   381→                </Button>
+   382→   382→              </div>
+   383→   383→              <p className="text-xs text-zinc-500 mt-3">
+   384→   384→                Pick any unique ID — no account needed. It saves locally in your browser.
+   385→   385→              </p>
+   386→   386→            </div>
+   387→   387→          </section>
+   388→   388→
+   389→   389→          {/* Features */}
+   390→   390→          <section className="max-w-5xl mx-auto px-4 sm:px-6 pb-24">
+   391→   391→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   392→   392→              {[
+   393→   393→                {
+   394→   394→                  icon: Zap,
+   395→   395→                  title: 'Instant Setup',
+   396→   396→                  desc: 'Create a MemBox and get your API endpoint + token in under 2 seconds. No signup, no waiting.',
+   397→   397→                },
+   398→   398→                {
+   399→   399→                  icon: Terminal,
+   400→   400→                  title: 'REST API',
+   401→   401→                  desc: 'Simple PUT/GET/DELETE on any path. Works with curl, Python, Node.js, or any HTTP client your agent uses.',
+   402→   402→                },
+   403→   403→                {
+   404→   404→                  icon: Shield,
+   405→   405→                  title: 'Token Auth',
+   406→   406→                  desc: 'Each MemBox gets a unique secret token. Only you (and your tools) can read and write to your memories.',
+   407→   407→                },
+   408→   408→                {
+   409→   409→                  icon: HardDrive,
+   410→   410→                  title: 'Unlimited Storage',
+   411→   411→                  desc: 'No storage limits. Store as many memories, keys, and files as you need. Completely free forever.',
+   412→   412→                },
+   413→   413→                {
+   414→   414→                  icon: Box,
+   415→   415→                  title: 'Multiple Boxes',
+   416→   416→                  desc: 'Create separate MemBoxes for different projects, agents, or workflows. Each isolated with its own token.',
+   417→   417→                },
+   418→   418→                {
+   419→   419→                  icon: FolderOpen,
+   420→   420→                  title: 'Path-Based',
+   421→   421→                  desc: 'Organize memories in any folder structure. Use paths like project/context, agent/state, or notes/ideas.',
+   422→   422→                },
+   423→   423→              ].map((f) => (
+   424→   424→                <Card key={f.title} className="bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-colors">
+   425→   425→                  <CardHeader className="pb-3">
+   426→   426→                    <div className="flex items-center gap-2 mb-1">
+   427→   427→                      <f.icon className="h-4 w-4 text-emerald-400" />
+   428→   428→                      <CardTitle className="text-sm font-semibold">{f.title}</CardTitle>
+   429→   429→                    </div>
+   430→   430→                  </CardHeader>
+   431→   431→                  <CardContent>
+   432→   432→                    <CardDescription className="text-sm text-zinc-400 leading-relaxed">
+   433→   433→                      {f.desc}
+   434→   434→                    </CardDescription>
+   435→   435→                  </CardContent>
+   436→   436→                </Card>
+   437→   437→              ))}
+   438→   438→            </div>
+   439→   439→          </section>
+   440→   440→        </main>
+   441→   441→
+   442→   442→        {/* Footer */}
+   443→   443→        <footer className="border-t border-zinc-800/60 py-6">
+   444→   444→          <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between text-xs text-zinc-500">
+   445→   445→            <span>MemBox — Free &amp; Open Memory for AI Agents</span>
+   446→   446→            <span>No tracking. No limits. No cost.</span>
+   447→   447→          </div>
+   448→   448→        </footer>
+   449→   449→      </div>
+   450→   450→    )
+   451→   451→  }
+   452→   452→
+   453→   453→  // Logged in — dashboard
+   454→   454→  const activeBox = selectedBox
+   455→   455→  const snippets = activeBox ? generateCodeSnippets(activeBox) : null
+   456→   456→
+   457→   457→  return (
+   458→   458→    <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
+   459→   459→      {/* Nav */}
+   460→   460→      <header className="border-b border-zinc-800/60 sticky top-0 bg-zinc-950/95 backdrop-blur-sm z-50">
+   461→   461→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+   462→   462→          <div className="flex items-center gap-3">
+   463→   463→            <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setSelectedBox(null); fetchBoxes() }}>
+   464→   464→              <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+   465→   465→                <Brain className="h-4 w-4 text-emerald-400" />
+   466→   466→              </div>
+   467→   467→              <span className="font-semibold text-lg tracking-tight">MemBox</span>
+   468→   468→            </div>
+   469→   469→          </div>
+   470→   470→          <div className="flex items-center gap-3">
+   471→   471→            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md bg-zinc-900 border border-zinc-800">
+   472→   472→              <div className="h-5 w-5 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] font-bold text-emerald-400">
+   473→   473→                {userId.charAt(0).toUpperCase()}
+   474→   474→              </div>
+   475→   475→              <span className="text-xs text-zinc-300 font-mono">{userId}</span>
+   476→   476→            </div>
+   477→   477→            <Button
+   478→   478→              variant="ghost"
+   479→   479→              size="sm"
+   480→   480→              onClick={() => {
+   481→   481→                setUserIdState('')
+   482→   482→                setUserIdInput('')
+   483→   483→                setBoxes([])
+   484→   484→                setSelectedBox(null)
+   485→   485→                localStorage.removeItem('membox-user-id')
+   486→   486→              }}
+   487→   487→              className="text-zinc-400 hover:text-zinc-200 text-xs"
+   488→   488→            >
+   489→   489→              Switch User
+   490→   490→            </Button>
+   491→   491→          </div>
+   492→   492→        </div>
+   493→   493→      </header>
+   494→   494→
+   495→   495→      <main className="flex-1">
+   496→   496→        {!activeBox ? (
+   497→   497→          /* Box List View */
+   498→   498→          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+   499→   499→            {/* Create */}
+   500→   500→            <Card className="bg-zinc-900/50 border-zinc-800 mb-8">
+   501→   501→              <CardHeader className="pb-4">
+   502→   502→                <CardTitle className="text-lg flex items-center gap-2">
+   503→   503→                  <Plus className="h-5 w-5 text-emerald-400" />
+   504→   504→                  Create a New MemBox
+   505→   505→                </CardTitle>
+   506→   506→                <CardDescription>
+   507→   507→                  Give your MemBox a name. You&apos;ll get a unique API endpoint and token instantly.
+   508→   508→                </CardDescription>
+   509→   509→              </CardHeader>
+   510→   510→              <CardContent>
+   511→   511→                <div className="flex gap-3">
+   512→   512→                  <Input
+   513→   513→                    placeholder="e.g. my-claude-agent, project-alpha, research-notes"
+   514→   514→                    value={boxName}
+   515→   515→                    onChange={(e) => setBoxName(e.target.value)}
+   516→   516→                    onKeyDown={(e) => e.key === 'Enter' && handleCreateBox()}
+   517→   517→                    className="bg-zinc-950 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+   518→   518→                  />
+   519→   519→                  <Button
+   520→   520→                    onClick={handleCreateBox}
+   521→   521→                    disabled={!boxName.trim()}
+   522→   522→                    className="bg-emerald-500 hover:bg-emerald-600 text-white whitespace-nowrap"
+   523→   523→                  >
+   524→   524→                    <Plus className="h-4 w-4 mr-1" />
+   525→   525→                    Create
+   526→   526→                  </Button>
+   527→   527→                </div>
+   528→   528→              </CardContent>
+   529→   529→            </Card>
+   530→   530→
+   531→   531→            {/* Box List */}
+   532→   532→            <div className="flex items-center justify-between mb-4">
+   533→   533→              <h2 className="text-sm font-medium text-zinc-400">
+   534→   534→                Your MemBoxes ({boxes.length})
+   535→   535→              </h2>
+   536→   536→            </div>
+   537→   537→
+   538→   538→            {loading ? (
+   539→   539→              <div className="text-center py-12 text-zinc-500">Loading...</div>
+   540→   540→            ) : boxes.length === 0 ? (
+   541→   541→              <Card className="bg-zinc-900/30 border-zinc-800/50 border-dashed">
+   542→   542→                <CardContent className="py-12 text-center">
+   543→   543→                  <Box className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
+   544→   544→                  <p className="text-zinc-500 text-sm">No MemBoxes yet. Create your first one above.</p>
+   545→   545→                </CardContent>
+   546→   546→              </Card>
+   547→   547→            ) : (
+   548→   548→              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   549→   549→                {boxes.map((box) => (
+   550→   550→                  <Card
+   551→   551→                    key={box.id}
+   552→   552→                    className="bg-zinc-900/50 border-zinc-800 hover:border-emerald-500/30 transition-all cursor-pointer group"
+   553→   553→                    onClick={() => handleViewBox(box)}
+   554→   554→                  >
+   555→   555→                    <CardHeader className="pb-3">
+   556→   556→                      <div className="flex items-start justify-between">
+   557→   557→                        <div className="flex items-center gap-2">
+   558→   558→                          <div className="h-8 w-8 rounded-md bg-emerald-500/10 flex items-center justify-center">
+   559→   559→                            <Box className="h-4 w-4 text-emerald-400" />
+   560→   560→                          </div>
+   561→   561→                          <CardTitle className="text-sm font-semibold">{box.name}</CardTitle>
+   562→   562→                        </div>
+   563→   563→                        <Button
+   564→   564→                          variant="ghost"
+   565→   565→                          size="sm"
+   566→   566→                          className="h-7 w-7 p-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+   567→   567→                          onClick={(e) => {
+   568→   568→                            e.stopPropagation()
+   569→   569→                            handleDeleteBox(box.slug)
+   570→   570→                          }}
+   571→   571→                        >
+   572→   572→                          <Trash2 className="h-3.5 w-3.5" />
+   573→   573→                        </Button>
+   574→   574→                      </div>
+   575→   575→                    </CardHeader>
+   576→   576→                    <CardContent className="space-y-3">
+   577→   577→                      <div className="space-y-1.5">
+   578→   578→                        <div className="flex items-center justify-between">
+   579→   579→                          <span className="text-[11px] text-zinc-500">Slug</span>
+   580→   580→                          <code className="text-[11px] text-emerald-400/80 font-mono">{box.slug}</code>
+   581→   581→                        </div>
+   582→   582→                        <div className="flex items-center justify-between">
+   583→   583→                          <span className="text-[11px] text-zinc-500">Files</span>
+   584→   584→                          <span className="text-[11px] text-zinc-400">{box.fileCount || 0}</span>
+   585→   585→                        </div>
+   586→   586→                        <div className="flex items-center justify-between">
+   587→   587→                          <span className="text-[11px] text-zinc-500">Size</span>
+   588→   588→                          <span className="text-[11px] text-zinc-400">{formatBytes(box.totalSize || 0)}</span>
+   589→   589→                        </div>
+   590→   590→                        <div className="flex items-center justify-between">
+   591→   591→                          <span className="text-[11px] text-zinc-500">Created</span>
+   592→   592→                          <span className="text-[11px] text-zinc-400">
+   593→   593→                            {new Date(box.createdAt).toLocaleDateString()}
+   594→   594→                          </span>
+   595→   595→                        </div>
+   596→   596→                      </div>
+   597→   597→                      <div className="pt-2 border-t border-zinc-800/50 flex items-center gap-1 text-xs text-emerald-400">
+   598→   598→                        View details <ChevronRight className="h-3 w-3" />
+   599→   599→                      </div>
+   600→   600→                    </CardContent>
+   601→   601→                  </Card>
+   602→   602→                ))}
+   603→   603→              </div>
+   604→   604→            )}
+   605→   605→          </div>
+   606→   606→        ) : (
+   607→   607→          /* Box Detail View */
+   608→   608→          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+   609→   609→            <button
+   610→   610→              onClick={() => { setSelectedBox(null); setBoxDetail(null) }}
+   611→   611→              className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200 mb-6 transition-colors"
+   612→   612→            >
+   613→   613→              <ChevronRight className="h-4 w-4 rotate-180" />
+   614→   614→              Back to all MemBoxes
+   615→   615→            </button>
+   616→   616→
+   617→   617→            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   618→   618→              {/* Left: Info */}
+   619→   619→              <div className="lg:col-span-1 space-y-4">
+   620→   620→                <Card className="bg-zinc-900/50 border-zinc-800">
+   621→   621→                  <CardHeader className="pb-3">
+   622→   622→                    <div className="flex items-center gap-2">
+   623→   623→                      <div className="h-8 w-8 rounded-md bg-emerald-500/10 flex items-center justify-center">
+   624→   624→                        <Box className="h-4 w-4 text-emerald-400" />
+   625→   625→                      </div>
+   626→   626→                      <CardTitle className="text-base">{activeBox.name}</CardTitle>
+   627→   627→                    </div>
+   628→   628→                  </CardHeader>
+   629→   629→                  <CardContent className="space-y-3">
+   630→   630→                    <div className="space-y-2">
+   631→   631→                      <div>
+   632→   632→                        <Label className="text-[11px] text-zinc-500 uppercase tracking-wider">Endpoint</Label>
+   633→   633→                        <div className="flex items-center gap-1 mt-1">
+   634→   634→                          <code className="text-xs text-emerald-400/80 font-mono bg-zinc-950 px-2 py-1 rounded flex-1 truncate">
+   635→   635→                            {getBaseUrl()}/api/m/{activeBox.slug}/...
+   636→   636→                          </code>
+   637→   637→                          <CopyButton text={`${getBaseUrl()}/api/m/${activeBox.slug}/`} />
+   638→   638→                        </div>
+   639→   639→                      </div>
+   640→   640→                      <div>
+   641→   641→                        <Label className="text-[11px] text-zinc-500 uppercase tracking-wider">Token</Label>
+   642→   642→                        <div className="flex items-center gap-1 mt-1">
+   643→   643→                          <code className="text-xs text-amber-400/80 font-mono bg-zinc-950 px-2 py-1 rounded flex-1 truncate">
+   644→   644→                            {showToken[activeBox.id] ? activeBox.token : '••••••••••••••••••••' + activeBox.token.slice(-6)}
+   645→   645→                          </code>
+   646→   646→                          <Button
+   647→   647→                            variant="ghost"
+   648→   648→                            size="sm"
+   649→   649→                            className="h-7 w-7 p-0"
+   650→   650→                            onClick={() => setShowToken((p) => ({ ...p, [activeBox.id]: !p[activeBox.id] }))}
+   651→   651→                          >
+   652→   652→                            <Eye className="h-3 w-3 text-zinc-500" />
+   653→   653→                          </Button>
+   654→   654→                          <CopyButton text={activeBox.token} />
+   655→   655→                        </div>
+   656→   656→                      </div>
+   657→   657→                      <div>
+   658→   658→                        <Label className="text-[11px] text-zinc-500 uppercase tracking-wider">Slug</Label>
+   659→   659→                        <div className="flex items-center gap-1 mt-1">
+   660→   660→                          <code className="text-xs text-zinc-400 font-mono bg-zinc-950 px-2 py-1 rounded flex-1 truncate">
+   661→   661→                            {activeBox.slug}
+   662→   662→                          </code>
+   663→   663→                          <CopyButton text={activeBox.slug} />
+   664→   664→                        </div>
+   665→   665→                      </div>
+   666→   666→                    </div>
+   667→   667→                  </CardContent>
+   668→   668→                </Card>
+   669→   669→
+   670→   670→                {/* Quick Stats */}
+   671→   671→                <Card className="bg-zinc-900/50 border-zinc-800">
+   672→   672→                  <CardHeader className="pb-3">
+   673→   673→                    <CardTitle className="text-sm">Stats</CardTitle>
+   674→   674→                  </CardHeader>
+   675→   675→                  <CardContent>
+   676→   676→                    <div className="grid grid-cols-2 gap-3">
+   677→   677→                      <div className="bg-zinc-950 rounded-lg p-3 text-center">
+   678→   678→                        <div className="text-xl font-bold text-emerald-400">
+   679→   679→                          {boxDetail?.fileCount || 0}
+   680→   680→                        </div>
+   681→   681→                        <div className="text-[11px] text-zinc-500">Files</div>
+   682→   682→                      </div>
+   683→   683→                      <div className="bg-zinc-950 rounded-lg p-3 text-center">
+   684→   684→                        <div className="text-xl font-bold text-emerald-400">
+   685→   685→                          {formatBytes(boxDetail?.totalSize || 0)}
+   686→   686→                        </div>
+   687→   687→                        <div className="text-[11px] text-zinc-500">Total Size</div>
+   688→   688→                      </div>
+   689→   689→                    </div>
+   690→   690→                  </CardContent>
+   691→   691→                </Card>
+   692→   692→
+   693→   693→                {/* Stored Files */}
+   694→   694→                <Card className="bg-zinc-900/50 border-zinc-800">
+   695→   695→                  <CardHeader className="pb-3">
+   696→   696→                    <CardTitle className="text-sm flex items-center gap-2">
+   697→   697→                      <FolderOpen className="h-4 w-4 text-zinc-400" />
+   698→   698→                      Stored Memories
+   699→   699→                    </CardTitle>
+   700→   700→                  </CardHeader>
+   701→   701→                  <CardContent>
+   702→   702→                    {detailLoading ? (
+   703→   703→                      <div className="text-center py-4 text-zinc-500 text-sm">Loading...</div>
+   704→   704→                    ) : (
+   705→   705→                      <div className="max-h-64 overflow-y-auto">
+   706→   706→                        <StorageTree files={boxDetail?.files} slug={activeBox.slug} token={activeBox.token} />
+   707→   707→                      </div>
+   708→   708→                    )}
+   709→   709→                  </CardContent>
+   710→   710→                </Card>
+   711→   711→
+   712→   712→                {/* Danger Zone */}
+   713→   713→                <Button
+   714→   714→                  variant="destructive"
+   715→   715→                  className="w-full"
+   716→   716→                  onClick={() => handleDeleteBox(activeBox.slug)}
+   717→   717→                >
+   718→   718→                  <Trash2 className="h-4 w-4 mr-2" />
+   719→   719→                  Delete This MemBox
+   720→   720→                </Button>
+   721→   721→              </div>
+   722→   722→
+   723→   723→              {/* Right: Code Snippets */}
+   724→   724→              <div className="lg:col-span-2">
+   725→   725→                <Card className="bg-zinc-900/50 border-zinc-800">
+   726→   726→                  <CardHeader>
+   727→   727→                    <CardTitle className="text-base flex items-center gap-2">
+   728→   728→                      <Terminal className="h-4 w-4 text-emerald-400" />
+   729→   729→                      API Usage
+   730→   730→                    </CardTitle>
+   731→   731→                    <CardDescription>
+   732→   732→                      Copy these snippets into your coding tools, agents, or scripts. Each MemBox works as a simple key-value store over REST.
+   733→   733→                    </CardDescription>
+   734→   734→                  </CardHeader>
+   735→   735→                  <CardContent>
+   736→   736→                    <Tabs defaultValue="curl" className="w-full">
+   737→   737→                      <TabsList className="bg-zinc-950 border-zinc-800 w-full justify-start">
+   738→   738→                        <TabsTrigger value="curl" className="text-xs">curl</TabsTrigger>
+   739→   739→                        <TabsTrigger value="python" className="text-xs">Python</TabsTrigger>
+   740→   740→                        <TabsTrigger value="node" className="text-xs">Node.js</TabsTrigger>
+   741→   741→                        <TabsTrigger value="mcp" className="text-xs">MCP / Agent</TabsTrigger>
+   742→   742→                      </TabsList>
+   743→   743→                      <TabsContent value="curl" className="mt-4">
+   744→   744→                        <CodeBlock code={snippets?.curl || ''} language="bash" />
+   745→   745→                      </TabsContent>
+   746→   746→                      <TabsContent value="python" className="mt-4">
+   747→   747→                        <CodeBlock code={snippets?.python || ''} language="python" />
+   748→   748→                      </TabsContent>
+   749→   749→                      <TabsContent value="node" className="mt-4">
+   750→   750→                        <CodeBlock code={snippets?.node || ''} language="javascript" />
+   751→   751→                      </TabsContent>
+   752→   752→                      <TabsContent value="mcp" className="mt-4">
+   753→   753→                        <CodeBlock code={snippets?.mcp || ''} language="json" />
+   754→   754→                      </TabsContent>
+   755→   755→                    </Tabs>
+   756→   756→                  </CardContent>
+   757→   757→                </Card>
+   758→   758→
+   759→   759→                {/* API Reference */}
+   760→   760→                <Card className="bg-zinc-900/50 border-zinc-800 mt-6">
+   761→   761→                  <CardHeader>
+   762→   762→                    <CardTitle className="text-base flex items-center gap-2">
+   763→   763→                      <Key className="h-4 w-4 text-emerald-400" />
+   764→   764→                      API Reference
+   765→   765→                    </CardTitle>
+   766→   766→                  </CardHeader>
+   767→   767→                  <CardContent>
+   768→   768→                    <div className="space-y-4">
+   769→   769→                      {[
+   770→   770→                        {
+   771→   771→                          method: 'GET',
+   772→   772→                          path: '/api/m/{slug}',
+   773→   773→                          desc: 'List all stored memories in the box root',
+   774→   774→                          color: 'text-emerald-400',
+   775→   775→                        },
+   776→   776→                        {
+   777→   777→                          method: 'GET',
+   778→   778→                          path: '/api/m/{slug}/{path}',
+   779→   779→                          desc: 'Read a specific memory by path. Auto-parses JSON.',
+   780→   780→                          color: 'text-emerald-400',
+   781→   781→                        },
+   782→   782→                        {
+   783→   783→                          method: 'PUT',
+   784→   784→                          path: '/api/m/{slug}/{path}',
+   785→   785→                          desc: 'Write (upsert) a memory. Accepts JSON body with {content: ...} or {data: ...}, or raw text.',
+   786→   786→                          color: 'text-amber-400',
+   787→   787→                        },
+   788→   788→                        {
+   789→   789→                          method: 'POST',
+   790→   790→                          path: '/api/m/{slug}/{path}',
+   791→   791→                          desc: 'Append to an existing memory. Creates the file if it does not exist.',
+   792→   792→                          color: 'text-sky-400',
+   793→   793→                        },
+   794→   794→                        {
+   795→   795→                          method: 'DELETE',
+   796→   796→                          path: '/api/m/{slug}/{path}',
+   797→   797→                          desc: 'Delete a memory or directory. Returns 404 if not found.',
+   798→   798→                          color: 'text-red-400',
+   799→   799→                        },
+   800→   800→                      ].map((ep) => (
+   801→   801→                        <div key={ep.method + ep.path} className="flex gap-3 items-start">
+   802→   802→                          <span className={`text-xs font-mono font-bold ${ep.color} min-w-[48px] pt-0.5`}>
+   803→   803→                            {ep.method}
+   804→   804→                          </span>
+   805→   805→                          <div>
+   806→   806→                            <code className="text-xs font-mono text-zinc-300">{ep.path}</code>
+   807→   807→                            <p className="text-xs text-zinc-500 mt-0.5">{ep.desc}</p>
+   808→   808→                          </div>
+   809→   809→                        </div>
+   810→   810→                      ))}
+   811→   811→
+   812→   812→                      <div className="pt-4 border-t border-zinc-800 mt-4">
+   813→   813→                        <h4 className="text-xs font-semibold text-zinc-300 mb-2">Authentication</h4>
+   814→   814→                        <p className="text-xs text-zinc-500 leading-relaxed">
+   815→   815→                          Include your token via the <code className="text-zinc-300">Authorization: Bearer &lt;token&gt;</code>{' '}
+   816→   816→                          header, or via the <code className="text-zinc-300">X-MemBox-Token</code> header.
+   817→   817→                          All requests without a valid token will receive a 401 or 403 response.
+   818→   818→                        </p>
+   819→   819→                      </div>
+   820→   820→
+   821→   821→                      <div className="pt-2">
+   822→   822→                        <h4 className="text-xs font-semibold text-zinc-300 mb-2">Request Body (PUT/POST)</h4>
+   823→   823→                        <p className="text-xs text-zinc-500 leading-relaxed">
+   824→   824→                          Send <code className="text-zinc-300">Content-Type: application/json</code> with one of:
+   825→   825→                        </p>
+   826→   826→                        <ul className="text-xs text-zinc-500 mt-1 space-y-1 ml-4 list-disc">
+   827→   827→                          <li><code className="text-zinc-300">{'{'}&quot;content&quot;: &quot;plain text&quot;{'}'}</code> — stored as plain text</li>
+   828→   828→                          <li><code className="text-zinc-300">{'{'}&quot;data&quot;: {'{'}...{'}'}{'}'}</code> — stored as formatted JSON</li>
+   829→   829→                          <li><code className="text-zinc-300">{'{'}...{'}'}</code> — any JSON, stored formatted</li>
+   830→   830→                          <li>Plain text body (without JSON content-type)</li>
+   831→   831→                        </ul>
+   832→   832→                      </div>
+   833→   833→                    </div>
+   834→   834→                  </CardContent>
+   835→   835→                </Card>
+   836→   836→              </div>
+   837→   837→            </div>
+   838→   838→          </div>
+   839→   839→        )}
+   840→   840→      </main>
+   841→   841→
+   842→   842→      {/* Footer */}
+   843→   843→      <footer className="border-t border-zinc-800/60 py-6 mt-auto">
+   844→   844→        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between text-xs text-zinc-500">
+   845→   845→          <span>MemBox — Free &amp; Open Memory for AI Agents</span>
+   846→   846→          <span>No tracking. No limits. No cost.</span>
+   847→   847→        </div>
+   848→   848→      </footer>
+   849→   849→      <Toaster richColors position="bottom-right" />
+   850→   850→    </div>
+   851→   851→  )
+   852→   852→}
+   853→   853→

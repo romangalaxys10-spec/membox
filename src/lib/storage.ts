@@ -104,6 +104,25 @@ export async function getBoxSize(slug: string): Promise<number> {
   return totalSize
 }
 
+export async function writeFileBinary(
+  slug: string,
+  filePath: string,
+  buffer: Buffer
+): Promise<void> {
+  const target = getFilePath(slug, filePath)
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  await fs.writeFile(target, buffer)
+}
+
+export async function readFileBinary(slug: string, filePath: string): Promise<Buffer | null> {
+  const target = getFilePath(slug, filePath)
+  try {
+    return await fs.readFile(target)
+  } catch {
+    return null
+  }
+}
+
 export async function deleteBoxDir(slug: string): Promise<void> {
   const boxPath = getBoxPath(slug)
   await fs.rm(boxPath, { recursive: true, force: true })

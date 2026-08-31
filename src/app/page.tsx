@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-
 import { Toaster, toast } from 'sonner'
 import {
   Brain,
@@ -26,6 +25,14 @@ import {
   FileText,
   Folder,
   Eye,
+  Upload,
+  Download,
+  File,
+  FileSpreadsheet,
+  FileImage,
+  FileCode,
+  FileArchive,
+  X,
 } from 'lucide-react'
 
 interface MemBox {
@@ -40,8 +47,17 @@ interface MemBox {
   files?: { name: string; type: 'file' | 'directory'; size?: number; modified?: string }[]
 }
 
+interface UploadResult {
+  name: string
+  path?: string
+  size?: number
+  type?: string
+  status?: string
+  error?: string
+}
+
 function getUserId() {
-  if (typeof window === "undefined") return ""
+  if (typeof window === 'undefined') return ''
   return localStorage.getItem('membox-user-id') || ''
 }
 
@@ -57,12 +73,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
     setTimeout(() => setCopied(false), 2000)
   }
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={handleCopy}
-      className="h-7 gap-1.5 text-xs"
-    >
+    <Button variant="ghost" size="sm" onClick={handleCopy} className="h-7 gap-1.5 text-xs">
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
       {label || (copied ? 'Copied' : 'Copy')}
     </Button>
@@ -91,29 +102,79 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
   )
 }
 
+function getFileIcon(name: string) {
+  const ext = name.split('.').pop()?.toLowerCase() || ''
+  const docExts = ['pdf', 'doc', 'docx', 'odt', 'rtf', 'txt', 'md', 'epub', 'mobi']
+  const sheetExts = ['xls', 'xlsx', 'ods', 'csv', 'tsv']
+  const imgExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'avif']
+  const codeExts = ['js', 'ts', 'jsx', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'css', 'html', 'json', 'yaml', 'yml', 'xml', 'sql', 'sh', 'vue', 'svelte']
+  const archiveExts = ['zip', 'tar', 'gz', 'bz2', '7z', 'rar']
+  const mediaExts = ['mp3', 'wav', 'ogg', 'flac', 'mp4', 'webm', 'avi', 'mov', 'mkv']
+
+  if (docExts.includes(ext)) return <FileText className="h-4 w-4 text-blue-400" />
+  if (sheetExts.includes(ext)) return <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+  if (imgExts.includes(ext)) return <FileImage className="h-4 w-4 text-purple-400" />
+  if (codeExts.includes(ext)) return <FileCode className="h-4 w-4 text-amber-400" />
+  if (archiveExts.includes(ext)) return <FileArchive className="h-4 w-4 text-orange-400" />
+  if (mediaExts.includes(ext)) return <File className="h-4 w-4 text-pink-400" />
+  return <File className="h-4 w-4 text-zinc-400" />
+}
+
+function FileTreeItem({
+  file,
+  slug,
+  token,
+  basePath,
+}: {
+  file: { name: string; type: 'file' | 'directory'; size?: number; modified?: string }
+  slug: string
+  token: string
+  basePath: string
+}) {
+  const downloadUrl = `${basePath}/api/m/${slug}/files/${name}`
+  const headers = new Headers()
+  headers.set('Authorization', `Bearer ${token}`)
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-zinc-800/50 text-sm group">
+      {file.type === 'directory' ? (
+        <Folder className="h-4 w-4 text-amber-400 shrink-0" />
+      ) : (
+        <div className="shrink-0">{getFileIcon(file.name)}</div>
+      )}
+      <span className="flex-1 text-zinc-300 font-mono text-xs truncate" title={file.name}>
+        {file.name}
+      </span>
+      {file.type === 'file' && file.size !== undefined && (
+        <span className="text-[11px] text-zinc-500 shrink-0">{formatBytes(file.size!)}</span>
+      )}
+      {file.modified && (
+        <span className="text-[11px] text-zinc-600 shrink-0 hidden sm:inline">
+          {new Date(file.modified).toLocaleDateString()}
+        </span>
+      )}
+      {file.type === 'file' && (
+        <a
+          href={`/api/m/${slug}/files/${file.name}?token=${token}`}
+          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+          title="Download"
+        >
+          <Download className="h-3.5 w-3.5 text-zinc-400 hover:text-emerald-400" />
+        </a>
+      )}
+    </div>
+  )
+}
+
 function StorageTree({ files, slug, token }: { files: MemBox['files']; slug: string; token: string }) {
   if (!files || files.length === 0) {
-    return <p className="text-sm text-zinc-500 py-4 text-center">No files yet. Use the API to store memories.</p>
+    return <p className="text-sm text-zinc-500 py-4 text-center">No files yet. Upload documents or use the API to store memories.</p>
   }
+  const basePath = typeof window !== 'undefined' ? window.location.origin : ''
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       {files.map((f) => (
-        <div key={f.name} className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-zinc-800/50 text-sm">
-          {f.type === 'directory' ? (
-            <Folder className="h-4 w-4 text-amber-400" />
-          ) : (
-            <FileText className="h-4 w-4 text-zinc-400" />
-          )}
-          <span className="flex-1 text-zinc-300 font-mono text-xs">{f.name}</span>
-          {f.type === 'file' && f.size !== undefined && (
-            <span className="text-xs text-zinc-500">{formatBytes(f.size!)}</span>
-          )}
-          {f.modified && (
-            <span className="text-xs text-zinc-600">
-              {new Date(f.modified).toLocaleDateString()}
-            </span>
-          )}
-        </div>
+        <FileTreeItem key={f.name} file={f} slug={slug} token={token} basePath={basePath} />
       ))}
     </div>
   )
@@ -129,6 +190,11 @@ export default function Home() {
   const [boxDetail, setBoxDetail] = useState<MemBox | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showToken, setShowToken] = useState<Record<string, boolean>>({})
+  const [uploading, setUploading] = useState(false)
+  const [uploadFolder, setUploadFolder] = useState('uploads')
+  const [dragOver, setDragOver] = useState(false)
+  const [uploadResults, setUploadResults] = useState<UploadResult[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const saved = getUserId()
@@ -156,10 +222,7 @@ export default function Home() {
 
   const handleSetUserId = () => {
     const id = userIdInput.trim()
-    if (!id) {
-      toast.error('Please enter a User ID')
-      return
-    }
+    if (!id) { toast.error('Please enter a User ID'); return }
     setUserIdState(id)
     setUserId(id)
     setBoxes([])
@@ -169,10 +232,7 @@ export default function Home() {
   }
 
   const handleCreateBox = async () => {
-    if (!boxName.trim()) {
-      toast.error('Please enter a name for your MemBox')
-      return
-    }
+    if (!boxName.trim()) { toast.error('Please enter a name'); return }
     try {
       const res = await fetch('/api/boxes', {
         method: 'POST',
@@ -180,16 +240,11 @@ export default function Home() {
         body: JSON.stringify({ name: boxName.trim(), userId }),
       })
       const data = await res.json()
-      if (data.error) {
-        toast.error(data.error)
-        return
-      }
+      if (data.error) { toast.error(data.error); return }
       setBoxName('')
       toast.success('MemBox created!')
       fetchBoxes()
-    } catch {
-      toast.error('Failed to create MemBox')
-    }
+    } catch { toast.error('Failed to create MemBox') }
   }
 
   const handleDeleteBox = async (slug: string) => {
@@ -199,140 +254,257 @@ export default function Home() {
       if (selectedBox?.slug === slug) setSelectedBox(null)
       toast.success('MemBox deleted')
       fetchBoxes()
-    } catch {
-      toast.error('Failed to delete MemBox')
-    }
+    } catch { toast.error('Failed to delete') }
   }
 
   const handleViewBox = async (box: MemBox) => {
     setSelectedBox(box)
     setDetailLoading(true)
+    setUploadResults([])
     try {
       const res = await fetch(`/api/boxes/${box.slug}`)
       const data = await res.json()
       setBoxDetail(data)
-    } catch {
-      toast.error('Failed to load box details')
-    } finally {
-      setDetailLoading(false)
-    }
+    } catch { toast.error('Failed to load box details') }
+    finally { setDetailLoading(false) }
   }
 
-  const getBaseUrl = () => {
-    if (typeof window !== 'undefined') {
-      return window.location.origin
-    }
-    return ''
+  const uploadFiles = async (fileList: FileList | File[]) => {
+    if (!selectedBox || fileList.length === 0) return
+    setUploading(true)
+    setUploadResults([])
+    try {
+      const formData = new FormData()
+      for (const f of Array.from(fileList)) {
+        formData.append('files', f)
+      }
+      if (uploadFolder.trim()) formData.append('folder', uploadFolder.trim())
+
+      const res = await fetch(`/api/m/${selectedBox.slug}/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${selectedBox.token}` },
+        body: formData,
+      })
+      const data = await res.json()
+      if (data.error) { toast.error(data.error); return }
+      setUploadResults(data.results || [])
+      if (data.uploaded > 0) toast.success(`${data.uploaded} file(s) uploaded!`)
+      if (data.failed > 0) toast.error(`${data.failed} file(s) failed`)
+      // Refresh file list
+      handleViewBox(selectedBox)
+      fetchBoxes()
+    } catch { toast.error('Upload failed') }
+    finally { setUploading(false) }
   }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    if (e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files)
+  }
+
+  const getBaseUrl = () => (typeof window !== 'undefined' ? window.location.origin : '')
 
   const generateCodeSnippets = (box: MemBox) => {
     const base = getBaseUrl()
-    const slug = box.slug
-    const token = box.token
-
+    const s = box.slug
+    const t = box.token
     return {
-      curl: `# Store a memory
-curl -X PUT "${base}/api/m/${slug}/my-key" \
-  -H "Authorization: Bearer ${token}" \
+      curl: `# --- Text Memory Operations ---
+
+# Store a memory
+curl -X PUT "${base}/api/m/${s}/my-key" \
+  -H "Authorization: Bearer ${t}" \
   -H "Content-Type: application/json" \
-  -d '{"content": "This is my agent\'s memory"}'
+  -d '{"content": "This is my agent memory"}'
 
 # Read a memory
-curl "${base}/api/m/${slug}/my-key" \
-  -H "Authorization: Bearer ${token}"
+curl "${base}/api/m/${s}/my-key" \
+  -H "Authorization: Bearer ${t}"
 
 # List all memories
-curl "${base}/api/m/${slug}" \
-  -H "Authorization: Bearer ${token}"
+curl "${base}/api/m/${s}" \
+  -H "Authorization: Bearer ${t}"
 
-# Delete a memory
-curl -X DELETE "${base}/api/m/${slug}/my-key" \
-  -H "Authorization: Bearer ${token}"`,
+# --- File Upload ---
+
+# Upload a PDF document
+curl -X POST "${base}/api/m/${s}/upload" \
+  -H "Authorization: Bearer ${t}" \
+  -F "files=@document.pdf" \
+  -F "folder=uploads"
+
+# Upload multiple files (Word, Excel, etc.)
+curl -X POST "${base}/api/m/${s}/upload" \
+  -H "Authorization: Bearer ${t}" \
+  -F "files=@report.docx" \
+  -F "files=@data.xlsx" \
+  -F "files=@notes.pdf" \
+  -F "folder=docs"
+
+# Upload to a specific folder
+curl -X POST "${base}/api/m/${s}/upload" \
+  -H "Authorization: Bearer ${t}" \
+  -F "files=@image.png" \
+  -F "folder=images/screenshots"
+
+# --- File Download ---
+
+# Download a file
+curl -O -J "${base}/api/m/${s}/files/uploads/document.pdf" \
+  -H "Authorization: Bearer ${t}"
+
+# --- Delete ---
+
+curl -X DELETE "${base}/api/m/${s}/my-key" \
+  -H "Authorization: Bearer ${t}"`,
 
       python: `import requests
 
 BASE = "${base}"
-SLUG = "${slug}"
-HEADERS = {"Authorization": "Bearer ${token}"}
+SLUG = "${s}"
+HEADERS = {"Authorization": "Bearer ${t}"}
 
-# Store a memory
+# --- Text Memory Operations ---
+
 requests.put(
     f"{BASE}/api/m/{SLUG}/project-context",
     headers=HEADERS,
     json={"content": "Working on a React app with TypeScript"}
 )
 
-# Read a memory
 resp = requests.get(f"{BASE}/api/m/{SLUG}/project-context", headers=HEADERS)
 print(resp.json())
 
-# Store structured data
-requests.put(
-    f"{BASE}/api/m/{SLUG}/user-preferences",
-    headers=HEADERS,
-    json={"data": {"theme": "dark", "language": "python"}}
-)
+# --- File Upload ---
 
-# List all memories
+# Upload a PDF
+with open("document.pdf", "rb") as f:
+    resp = requests.post(
+        f"{BASE}/api/m/{SLUG}/upload",
+        headers=HEADERS,
+        files={"files": ("document.pdf", f, "application/pdf")},
+        data={"folder": "uploads"}
+    )
+print(resp.json())
+
+# Upload multiple files
+files_to_upload = [
+    ("report.docx", open("report.docx", "rb"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ("data.xlsx", open("data.xlsx", "rb"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    ("notes.pdf", open("notes.pdf", "rb"), "application/pdf"),
+]
+resp = requests.post(
+    f"{BASE}/api/m/{SLUG}/upload",
+    headers=HEADERS,
+    files=[("files", name, f, mime) for name, f, mime in files_to_upload],
+    data={"folder": "docs"}
+)
+print(resp.json())
+
+# --- File Download ---
+
+resp = requests.get(
+    f"{BASE}/api/m/{SLUG}/files/uploads/document.pdf",
+    headers=HEADERS
+)
+with open("downloaded.pdf", "wb") as f:
+    f.write(resp.content)
+
+# List all files
 resp = requests.get(f"{BASE}/api/m/{SLUG}", headers=HEADERS)
 print(resp.json())`,
 
       node: `const BASE = "${base}";
-const SLUG = "${slug}";
-const HEADERS = { Authorization: "Bearer ${token}" };
+const SLUG = "${s}";
+const HEADERS = { Authorization: "Bearer ${t}" };
 
-// Store a memory
+// --- Text Memory Operations ---
+
 await fetch(\`\${BASE}/api/m/\${SLUG}/agent-state\`, {
   method: "PUT",
   headers: { ...HEADERS, "Content-Type": "application/json" },
   body: JSON.stringify({ content: "Remember: user prefers functional style" }),
 });
 
-// Read a memory
-const resp = await fetch(\`\${BASE}/api/m/\${SLUG}/agent-state\`, {
-  headers: HEADERS,
+// --- File Upload ---
+
+// Upload a single file
+const form = new FormData();
+form.append("files", fileInput.files[0]);
+form.append("folder", "uploads");
+await fetch(\`\${BASE}/api/m/\${SLUG}/upload\`, {
+  method: "POST",
+  headers: HEADERS,  // Note: don't set Content-Type, browser sets it with boundary
+  body: form,
 });
-const data = await resp.json();
-console.log(data);
 
-// Store structured JSON
-await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
-  method: "PUT",
-  headers: { ...HEADERS, "Content-Type": "application/json" },
-  body: JSON.stringify({ data: { task: "refactoring", step: 3 } }),
-});`,
+// Upload multiple files
+const form2 = new FormData();
+form2.append("files", pdfFile);
+form2.append("files", excelFile);
+form2.append("files", wordFile);
+form2.append("folder", "docs");
+const res = await fetch(\`\${BASE}/api/m/\${SLUG}/upload\`, {
+  method: "POST",
+  headers: HEADERS,
+  body: form2,
+});
+console.log(await res.json());
 
-      mcp: `# Use as MCP-compatible memory server
+// --- File Download ---
+
+const dl = await fetch(
+  \`\${BASE}/api/m/\${SLUG}/files/uploads/document.pdf\`,
+  { headers: HEADERS }
+);
+const blob = await dl.blob();
+const url = URL.createObjectURL(blob);
+const a = document.createElement("a");
+a.href = url; a.download = "document.pdf"; a.click();`,
+
+      mcp: `# MemBox as MCP-compatible Memory Server
 # Add to your Claude Desktop / AI tool config:
 
-# The MemBox API is REST-based and compatible with any tool that can make HTTP requests.
-# Endpoint: ${base}/api/m/${slug}/{path}
-# Auth: Bearer token in Authorization header
+# The MemBox API supports:
+# 1. Key-value text memory via PUT/GET/DELETE
+# 2. File upload (PDF, Word, Excel, images, etc.) via multipart POST
+# 3. File download via /files/ prefix
 
-# Example tool definition for your agent:
-# {
-#   "name": "membox_store",
-#   "description": "Store a memory in MemBox",
-#   "parameters": {
-#     "path": { "type": "string", "description": "Key path for the memory" },
-#     "content": { "type": "string", "description": "Content to store" }
-#   },
-#   "handler": async (params) => {
-#     return fetch(\"${base}/api/m/${slug}/\" + params.path, {
-#       method: "PUT",
-#       headers: { "Authorization": "Bearer ${token}", "Content-Type": "application/json" },
-#       body: JSON.stringify({ content: params.content })
-#     });
-#   }
-# }`,
+BASE = "${base}"
+SLUG = "${s}"
+TOKEN = "${t}"
+
+# Example tool definitions for your agent:
+
+# membox_store: PUT {path, content} -> text memory
+# membox_read:  GET {path} -> text/JSON memory
+# membox_upload: POST multipart {files, folder} -> file upload
+# membox_download: GET /files/{path} -> binary file
+# membox_list:  GET / -> list all stored items
+# membox_delete: DELETE {path} -> remove item
+
+# Upload endpoint: ${base}/api/m/${s}/upload
+# Download endpoint: ${base}/api/m/${s}/files/{path}
+# List endpoint: ${base}/api/m/${s}
+
+# Supported file types for upload:
+# Documents: .pdf, .doc, .docx, .odt, .rtf, .txt, .md, .html, .csv
+# Spreadsheets: .xls, .xlsx, .ods, .xlsm
+# Presentations: .ppt, .pptx, .odp
+# Data: .json, .yaml, .xml, .sql, .parquet, .onnx
+# Images: .png, .jpg, .jpeg, .gif, .webp, .svg
+# Audio/Video: .mp3, .wav, .mp4, .webm
+# Archives: .zip, .tar, .gz, .7z, .rar
+# Code: .py, .js, .ts, .go, .rs, .java, .cpp, and more
+# Max file size: 500 MB per file`,
     }
   }
 
-  // Not logged in state
+  // ─── Not logged in ─────────────────────────────────────
   if (!userId) {
     return (
       <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
-        {/* Nav */}
         <header className="border-b border-zinc-800/60">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
             <div className="flex items-center gap-2">
@@ -347,7 +519,6 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
           </div>
         </header>
 
-        {/* Hero */}
         <main className="flex-1">
           <section className="max-w-4xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm mb-8">
@@ -361,7 +532,7 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
             </h1>
             <p className="text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto mb-10 leading-relaxed">
               Create a MemBox in seconds. Get an API endpoint and token.
-              Let all your coding tools and AI agents use it as persistent live memory.
+              Upload documents, store memories, and let your AI agents access it all via a simple REST API.
             </p>
             <div className="max-w-md mx-auto">
               <div className="flex gap-2">
@@ -372,54 +543,23 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                   onKeyDown={(e) => e.key === 'Enter' && handleSetUserId()}
                   className="bg-zinc-900 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-11"
                 />
-                <Button
-                  onClick={handleSetUserId}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white h-11 px-6"
-                >
-                  Get Started
-                  <ChevronRight className="h-4 w-4 ml-1" />
+                <Button onClick={handleSetUserId} className="bg-emerald-500 hover:bg-emerald-600 text-white h-11 px-6">
+                  Get Started <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </div>
-              <p className="text-xs text-zinc-500 mt-3">
-                Pick any unique ID — no account needed. It saves locally in your browser.
-              </p>
+              <p className="text-xs text-zinc-500 mt-3">Pick any unique ID — no account needed. It saves locally in your browser.</p>
             </div>
           </section>
 
-          {/* Features */}
           <section className="max-w-5xl mx-auto px-4 sm:px-6 pb-24">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {[
-                {
-                  icon: Zap,
-                  title: 'Instant Setup',
-                  desc: 'Create a MemBox and get your API endpoint + token in under 2 seconds. No signup, no waiting.',
-                },
-                {
-                  icon: Terminal,
-                  title: 'REST API',
-                  desc: 'Simple PUT/GET/DELETE on any path. Works with curl, Python, Node.js, or any HTTP client your agent uses.',
-                },
-                {
-                  icon: Shield,
-                  title: 'Token Auth',
-                  desc: 'Each MemBox gets a unique secret token. Only you (and your tools) can read and write to your memories.',
-                },
-                {
-                  icon: HardDrive,
-                  title: 'Unlimited Storage',
-                  desc: 'No storage limits. Store as many memories, keys, and files as you need. Completely free forever.',
-                },
-                {
-                  icon: Box,
-                  title: 'Multiple Boxes',
-                  desc: 'Create separate MemBoxes for different projects, agents, or workflows. Each isolated with its own token.',
-                },
-                {
-                  icon: FolderOpen,
-                  title: 'Path-Based',
-                  desc: 'Organize memories in any folder structure. Use paths like project/context, agent/state, or notes/ideas.',
-                },
+                { icon: Zap, title: 'Instant Setup', desc: 'Create a MemBox and get your API endpoint + token in under 2 seconds. No signup, no waiting.' },
+                { icon: Terminal, title: 'REST API', desc: 'Simple PUT/GET/DELETE on any path. Works with curl, Python, Node.js, or any HTTP client your agent uses.' },
+                { icon: Shield, title: 'Token Auth', desc: 'Each MemBox gets a unique secret token. Only you (and your tools) can read and write to your memories.' },
+                { icon: Upload, title: 'File Upload', desc: 'Upload PDFs, Word docs, Excel sheets, images, code, archives — any file up to 500 MB. Organize in folders.' },
+                { icon: HardDrive, title: 'Unlimited Storage', desc: 'No storage limits. Store as many memories, keys, and files as you need. Completely free forever.' },
+                { icon: FolderOpen, title: 'Path-Based', desc: 'Organize memories in any folder structure. Use paths like project/context, agent/state, or docs/reports.' },
               ].map((f) => (
                 <Card key={f.title} className="bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-colors">
                   <CardHeader className="pb-3">
@@ -429,17 +569,24 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <CardDescription className="text-sm text-zinc-400 leading-relaxed">
-                      {f.desc}
-                    </CardDescription>
+                    <CardDescription className="text-sm text-zinc-400 leading-relaxed">{f.desc}</CardDescription>
                   </CardContent>
                 </Card>
               ))}
             </div>
+
+            {/* Supported file types */}
+            <div className="mt-16 text-center">
+              <h3 className="text-lg font-semibold mb-4">Upload Any Document Type</h3>
+              <div className="flex flex-wrap justify-center gap-2">
+                {['PDF', 'Word', 'Excel', 'PowerPoint', 'CSV', 'JSON', 'YAML', 'Markdown', 'Images', 'Audio', 'Video', 'Archives', 'Code Files', 'Parquet', 'ONNX'].map((t) => (
+                  <Badge key={t} variant="secondary" className="bg-zinc-900 text-zinc-400 border-zinc-800 text-xs">{t}</Badge>
+                ))}
+              </div>
+            </div>
           </section>
         </main>
 
-        {/* Footer */}
         <footer className="border-t border-zinc-800/60 py-6">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between text-xs text-zinc-500">
             <span>MemBox — Free &amp; Open Memory for AI Agents</span>
@@ -450,13 +597,12 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
     )
   }
 
-  // Logged in — dashboard
+  // ─── Logged in — dashboard ─────────────────────────────
   const activeBox = selectedBox
   const snippets = activeBox ? generateCodeSnippets(activeBox) : null
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
-      {/* Nav */}
       <header className="border-b border-zinc-800/60 sticky top-0 bg-zinc-950/95 backdrop-blur-sm z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -475,15 +621,8 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
               <span className="text-xs text-zinc-300 font-mono">{userId}</span>
             </div>
             <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setUserIdState('')
-                setUserIdInput('')
-                setBoxes([])
-                setSelectedBox(null)
-                localStorage.removeItem('membox-user-id')
-              }}
+              variant="ghost" size="sm"
+              onClick={() => { setUserIdState(''); setUserIdInput(''); setBoxes([]); setSelectedBox(null); localStorage.removeItem('membox-user-id') }}
               className="text-zinc-400 hover:text-zinc-200 text-xs"
             >
               Switch User
@@ -494,18 +633,15 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
 
       <main className="flex-1">
         {!activeBox ? (
-          /* Box List View */
+          /* ─── Box List View ─── */
           <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-            {/* Create */}
             <Card className="bg-zinc-900/50 border-zinc-800 mb-8">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Plus className="h-5 w-5 text-emerald-400" />
                   Create a New MemBox
                 </CardTitle>
-                <CardDescription>
-                  Give your MemBox a name. You&apos;ll get a unique API endpoint and token instantly.
-                </CardDescription>
+                <CardDescription>Give your MemBox a name. You&apos;ll get a unique API endpoint and token instantly.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex gap-3">
@@ -516,23 +652,15 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                     onKeyDown={(e) => e.key === 'Enter' && handleCreateBox()}
                     className="bg-zinc-950 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
                   />
-                  <Button
-                    onClick={handleCreateBox}
-                    disabled={!boxName.trim()}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-white whitespace-nowrap"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Create
+                  <Button onClick={handleCreateBox} disabled={!boxName.trim()} className="bg-emerald-500 hover:bg-emerald-600 text-white whitespace-nowrap">
+                    <Plus className="h-4 w-4 mr-1" /> Create
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Box List */}
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-zinc-400">
-                Your MemBoxes ({boxes.length})
-              </h2>
+              <h2 className="text-sm font-medium text-zinc-400">Your MemBoxes ({boxes.length})</h2>
             </div>
 
             {loading ? (
@@ -561,13 +689,9 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                           <CardTitle className="text-sm font-semibold">{box.name}</CardTitle>
                         </div>
                         <Button
-                          variant="ghost"
-                          size="sm"
+                          variant="ghost" size="sm"
                           className="h-7 w-7 p-0 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteBox(box.slug)
-                          }}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteBox(box.slug) }}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -589,9 +713,7 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-zinc-500">Created</span>
-                          <span className="text-[11px] text-zinc-400">
-                            {new Date(box.createdAt).toLocaleDateString()}
-                          </span>
+                          <span className="text-[11px] text-zinc-400">{new Date(box.createdAt).toLocaleDateString()}</span>
                         </div>
                       </div>
                       <div className="pt-2 border-t border-zinc-800/50 flex items-center gap-1 text-xs text-emerald-400">
@@ -604,7 +726,7 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
             )}
           </div>
         ) : (
-          /* Box Detail View */
+          /* ─── Box Detail View ─── */
           <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
             <button
               onClick={() => { setSelectedBox(null); setBoxDetail(null) }}
@@ -615,8 +737,9 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
             </button>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left: Info */}
+              {/* Left Column */}
               <div className="lg:col-span-1 space-y-4">
+                {/* Box Info */}
                 <Card className="bg-zinc-900/50 border-zinc-800">
                   <CardHeader className="pb-3">
                     <div className="flex items-center gap-2">
@@ -643,12 +766,7 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                           <code className="text-xs text-amber-400/80 font-mono bg-zinc-950 px-2 py-1 rounded flex-1 truncate">
                             {showToken[activeBox.id] ? activeBox.token : '••••••••••••••••••••' + activeBox.token.slice(-6)}
                           </code>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0"
-                            onClick={() => setShowToken((p) => ({ ...p, [activeBox.id]: !p[activeBox.id] }))}
-                          >
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setShowToken((p) => ({ ...p, [activeBox.id]: !p[activeBox.id] }))}>
                             <Eye className="h-3 w-3 text-zinc-500" />
                           </Button>
                           <CopyButton text={activeBox.token} />
@@ -657,9 +775,7 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                       <div>
                         <Label className="text-[11px] text-zinc-500 uppercase tracking-wider">Slug</Label>
                         <div className="flex items-center gap-1 mt-1">
-                          <code className="text-xs text-zinc-400 font-mono bg-zinc-950 px-2 py-1 rounded flex-1 truncate">
-                            {activeBox.slug}
-                          </code>
+                          <code className="text-xs text-zinc-400 font-mono bg-zinc-950 px-2 py-1 rounded flex-1 truncate">{activeBox.slug}</code>
                           <CopyButton text={activeBox.slug} />
                         </div>
                       </div>
@@ -667,7 +783,75 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                   </CardContent>
                 </Card>
 
-                {/* Quick Stats */}
+                {/* File Upload Zone */}
+                <Card className="bg-zinc-900/50 border-zinc-800">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Upload className="h-4 w-4 text-emerald-400" />
+                      Upload Files
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      PDF, Word, Excel, images, code, archives — up to 500 MB each
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Folder (e.g. docs, uploads, data)"
+                        value={uploadFolder}
+                        onChange={(e) => setUploadFolder(e.target.value)}
+                        className="bg-zinc-950 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 text-xs h-8"
+                      />
+                    </div>
+                    <div
+                      className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
+                        dragOver ? 'border-emerald-400 bg-emerald-500/5' : 'border-zinc-700 hover:border-zinc-600'
+                      }`}
+                      onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                      onDragLeave={() => setDragOver(false)}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => e.target.files && uploadFiles(e.target.files)}
+                      />
+                      {uploading ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="h-8 w-8 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin" />
+                          <span className="text-xs text-zinc-400">Uploading...</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2">
+                          <Upload className={`h-6 w-6 ${dragOver ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                          <p className="text-xs text-zinc-400">
+                            <span className="text-emerald-400 font-medium">Click to browse</span> or drag &amp; drop files here
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    {uploadResults.length > 0 && (
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {uploadResults.map((r, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs px-2 py-1 rounded bg-zinc-950">
+                            {'error' in r ? (
+                              <X className="h-3 w-3 text-red-400 shrink-0" />
+                            ) : (
+                              <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                            )}
+                            <span className="text-zinc-300 truncate flex-1 font-mono">{r.name}</span>
+                            {r.size && <span className="text-zinc-500 shrink-0">{formatBytes(r.size)}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Stats */}
                 <Card className="bg-zinc-900/50 border-zinc-800">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm">Stats</CardTitle>
@@ -675,34 +859,30 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                   <CardContent>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-zinc-950 rounded-lg p-3 text-center">
-                        <div className="text-xl font-bold text-emerald-400">
-                          {boxDetail?.fileCount || 0}
-                        </div>
-                        <div className="text-[11px] text-zinc-500">Files</div>
+                        <div className="text-xl font-bold text-emerald-400">{boxDetail?.fileCount || 0}</div>
+                        <div className="text-[11px] text-zinc-500">Items</div>
                       </div>
                       <div className="bg-zinc-950 rounded-lg p-3 text-center">
-                        <div className="text-xl font-bold text-emerald-400">
-                          {formatBytes(boxDetail?.totalSize || 0)}
-                        </div>
+                        <div className="text-xl font-bold text-emerald-400">{formatBytes(boxDetail?.totalSize || 0)}</div>
                         <div className="text-[11px] text-zinc-500">Total Size</div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Stored Files */}
+                {/* Stored Files Tree */}
                 <Card className="bg-zinc-900/50 border-zinc-800">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <FolderOpen className="h-4 w-4 text-zinc-400" />
-                      Stored Memories
+                      Stored Items
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     {detailLoading ? (
                       <div className="text-center py-4 text-zinc-500 text-sm">Loading...</div>
                     ) : (
-                      <div className="max-h-64 overflow-y-auto">
+                      <div className="max-h-72 overflow-y-auto">
                         <StorageTree files={boxDetail?.files} slug={activeBox.slug} token={activeBox.token} />
                       </div>
                     )}
@@ -710,17 +890,12 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                 </Card>
 
                 {/* Danger Zone */}
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => handleDeleteBox(activeBox.slug)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete This MemBox
+                <Button variant="destructive" className="w-full" onClick={() => handleDeleteBox(activeBox.slug)}>
+                  <Trash2 className="h-4 w-4 mr-2" /> Delete This MemBox
                 </Button>
               </div>
 
-              {/* Right: Code Snippets */}
+              {/* Right Column — Code Snippets & API Ref */}
               <div className="lg:col-span-2">
                 <Card className="bg-zinc-900/50 border-zinc-800">
                   <CardHeader>
@@ -729,7 +904,7 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                       API Usage
                     </CardTitle>
                     <CardDescription>
-                      Copy these snippets into your coding tools, agents, or scripts. Each MemBox works as a simple key-value store over REST.
+                      Copy these snippets into your coding tools, agents, or scripts. Supports text memory + file upload/download.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -740,18 +915,10 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                         <TabsTrigger value="node" className="text-xs">Node.js</TabsTrigger>
                         <TabsTrigger value="mcp" className="text-xs">MCP / Agent</TabsTrigger>
                       </TabsList>
-                      <TabsContent value="curl" className="mt-4">
-                        <CodeBlock code={snippets?.curl || ''} language="bash" />
-                      </TabsContent>
-                      <TabsContent value="python" className="mt-4">
-                        <CodeBlock code={snippets?.python || ''} language="python" />
-                      </TabsContent>
-                      <TabsContent value="node" className="mt-4">
-                        <CodeBlock code={snippets?.node || ''} language="javascript" />
-                      </TabsContent>
-                      <TabsContent value="mcp" className="mt-4">
-                        <CodeBlock code={snippets?.mcp || ''} language="json" />
-                      </TabsContent>
+                      <TabsContent value="curl" className="mt-4"><CodeBlock code={snippets?.curl || ''} language="bash" /></TabsContent>
+                      <TabsContent value="python" className="mt-4"><CodeBlock code={snippets?.python || ''} language="python" /></TabsContent>
+                      <TabsContent value="node" className="mt-4"><CodeBlock code={snippets?.node || ''} language="javascript" /></TabsContent>
+                      <TabsContent value="mcp" className="mt-4"><CodeBlock code={snippets?.mcp || ''} language="text" /></TabsContent>
                     </Tabs>
                   </CardContent>
                 </Card>
@@ -765,43 +932,18 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {[
-                        {
-                          method: 'GET',
-                          path: '/api/m/{slug}',
-                          desc: 'List all stored memories in the box root',
-                          color: 'text-emerald-400',
-                        },
-                        {
-                          method: 'GET',
-                          path: '/api/m/{slug}/{path}',
-                          desc: 'Read a specific memory by path. Auto-parses JSON.',
-                          color: 'text-emerald-400',
-                        },
-                        {
-                          method: 'PUT',
-                          path: '/api/m/{slug}/{path}',
-                          desc: 'Write (upsert) a memory. Accepts JSON body with {content: ...} or {data: ...}, or raw text.',
-                          color: 'text-amber-400',
-                        },
-                        {
-                          method: 'POST',
-                          path: '/api/m/{slug}/{path}',
-                          desc: 'Append to an existing memory. Creates the file if it does not exist.',
-                          color: 'text-sky-400',
-                        },
-                        {
-                          method: 'DELETE',
-                          path: '/api/m/{slug}/{path}',
-                          desc: 'Delete a memory or directory. Returns 404 if not found.',
-                          color: 'text-red-400',
-                        },
+                        { method: 'GET', path: '/api/m/{slug}', desc: 'List all stored memories and files', color: 'text-emerald-400' },
+                        { method: 'GET', path: '/api/m/{slug}/{path}', desc: 'Read a text/JSON memory by path. Auto-parses JSON.', color: 'text-emerald-400' },
+                        { method: 'PUT', path: '/api/m/{slug}/{path}', desc: 'Write (upsert) a text memory. Accepts {content: ...}, {data: ...}, or raw text.', color: 'text-amber-400' },
+                        { method: 'POST', path: '/api/m/{slug}/{path}', desc: 'Append to an existing text memory.', color: 'text-sky-400' },
+                        { method: 'POST', path: '/api/m/{slug}/upload', desc: 'Upload files (multipart form). Field: "files". Optional: "folder". Max 500 MB/file.', color: 'text-violet-400' },
+                        { method: 'GET', path: '/api/m/{slug}/files/{path}', desc: 'Download a file (returns raw bytes with correct MIME type).', color: 'text-emerald-400' },
+                        { method: 'DELETE', path: '/api/m/{slug}/{path}', desc: 'Delete a memory, file, or directory.', color: 'text-red-400' },
                       ].map((ep) => (
                         <div key={ep.method + ep.path} className="flex gap-3 items-start">
-                          <span className={`text-xs font-mono font-bold ${ep.color} min-w-[48px] pt-0.5`}>
-                            {ep.method}
-                          </span>
+                          <span className={`text-xs font-mono font-bold ${ep.color} min-w-[48px] pt-0.5`}>{ep.method}</span>
                           <div>
                             <code className="text-xs font-mono text-zinc-300">{ep.path}</code>
                             <p className="text-xs text-zinc-500 mt-0.5">{ep.desc}</p>
@@ -809,26 +951,22 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
                         </div>
                       ))}
 
-                      <div className="pt-4 border-t border-zinc-800 mt-4">
-                        <h4 className="text-xs font-semibold text-zinc-300 mb-2">Authentication</h4>
-                        <p className="text-xs text-zinc-500 leading-relaxed">
-                          Include your token via the <code className="text-zinc-300">Authorization: Bearer &lt;token&gt;</code>{' '}
-                          header, or via the <code className="text-zinc-300">X-MemBox-Token</code> header.
-                          All requests without a valid token will receive a 401 or 403 response.
-                        </p>
-                      </div>
-
-                      <div className="pt-2">
-                        <h4 className="text-xs font-semibold text-zinc-300 mb-2">Request Body (PUT/POST)</h4>
-                        <p className="text-xs text-zinc-500 leading-relaxed">
-                          Send <code className="text-zinc-300">Content-Type: application/json</code> with one of:
-                        </p>
-                        <ul className="text-xs text-zinc-500 mt-1 space-y-1 ml-4 list-disc">
-                          <li><code className="text-zinc-300">{'{'}&quot;content&quot;: &quot;plain text&quot;{'}'}</code> — stored as plain text</li>
-                          <li><code className="text-zinc-300">{'{'}&quot;data&quot;: {'{'}...{'}'}{'}'}</code> — stored as formatted JSON</li>
-                          <li><code className="text-zinc-300">{'{'}...{'}'}</code> — any JSON, stored formatted</li>
-                          <li>Plain text body (without JSON content-type)</li>
-                        </ul>
+                      <div className="pt-4 border-t border-zinc-800 space-y-3">
+                        <div>
+                          <h4 className="text-xs font-semibold text-zinc-300 mb-1">Authentication</h4>
+                          <p className="text-xs text-zinc-500 leading-relaxed">
+                            <code className="text-zinc-300">Authorization: Bearer {'<token>'}</code> or <code className="text-zinc-300">X-MemBox-Token</code> header.
+                            For file downloads via browser, use <code className="text-zinc-300">?token={'<token>'}</code> query param.
+                          </p>
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-semibold text-zinc-300 mb-1">Supported Upload Types</h4>
+                          <p className="text-xs text-zinc-500 leading-relaxed">
+                            Documents (.pdf, .doc, .docx, .odt, .rtf, .txt, .md, .csv), Spreadsheets (.xls, .xlsx, .ods),
+                            Presentations (.ppt, .pptx), Images (.png, .jpg, .gif, .webp, .svg), Audio/Video (.mp3, .mp4, .wav, .webm),
+                            Archives (.zip, .tar, .gz), Code files, Data files (.parquet, .onnx, .json, .yaml), and 100+ more.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -839,7 +977,6 @@ await fetch(\`\${BASE}/api/m/\${SLUG}/context\`, {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-zinc-800/60 py-6 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between text-xs text-zinc-500">
           <span>MemBox — Free &amp; Open Memory for AI Agents</span>
