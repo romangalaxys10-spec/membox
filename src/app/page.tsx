@@ -283,8 +283,8 @@ export default function Home() {
   const [loginUsernameInput, setLoginUsernameInput] = useState('')
   const [savedLoginToken, setSavedLoginToken] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
-  const [showLoginTokenModal, setShowLoginTokenModal] = useState(false)
   const [registerLoading, setRegisterLoading] = useState(false)
+  const [createBoxLoading, setCreateBoxLoading] = useState(false)
 
   useEffect(() => {
     const saved = getStoredUserId()
@@ -320,11 +320,10 @@ export default function Home() {
         return
       }
       if (data.error) { toast.error(data.error); setRegisterLoading(false); return }
-      // New user created — show mandatory token intro
+      // New user created — show mandatory full-page token intro
       setUserIdState(id); setStoredUserId(id); setBoxes([]); setSelectedBox(null)
       setSavedLoginToken(data.loginToken)
-      setShowLoginTokenModal(true)
-      setView('dashboard')
+      setView('login-token')
     } catch { toast.error('Registration failed') }
     finally { setRegisterLoading(false) }
   }
@@ -349,11 +348,14 @@ export default function Home() {
   }
 
   const handleLogout = () => {
-    setUserIdState(''); setUserIdInput(''); setBoxes([]); setSelectedBox(null); clearStoredUser(); setView('landing')
+    setUserIdState(''); setUserIdInput(''); setBoxes([]); setSelectedBox(null)
+    setLoginUsernameInput(''); setLoginTokenInput(''); setSavedLoginToken('')
+    clearStoredUser(); setView('landing')
   }
 
   const handleCreateBox = async () => {
     if (!boxName.trim()) { toast.error('Please enter a name'); return }
+    setCreateBoxLoading(true)
     try {
       const res = await fetch('/api/boxes', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -363,6 +365,7 @@ export default function Home() {
       if (data.error) { toast.error(data.error); return }
       setBoxName(''); toast.success('MemBox created!'); fetchBoxes()
     } catch { toast.error('Failed to create MemBox') }
+    finally { setCreateBoxLoading(false) }
   }
 
   const handleDeleteBox = async (slug: string) => {
@@ -495,15 +498,6 @@ TOKEN = "${t}"
   }
 
   /* ════════════════════════════════════════════════
-     LOGIN TOKEN MODAL (mandatory on registration)
-     ════════════════════════════════════════════════ */
-  const loginTokenModal = showLoginTokenModal && savedLoginToken ? (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />      <LoginTokenModalContent userId={userId} token={savedLoginToken} onAcknowledge={() => setShowLoginTokenModal(false)} />
-    </div>
-  ) : null
-
-  /* ════════════════════════════════════════════════
      NAV (shared)
      ════════════════════════════════════════════════ */
   const nav = (
@@ -619,7 +613,6 @@ TOKEN = "${t}"
           <GLMInviteCTA />
         </main>
         <CreditFooter />
-        {loginTokenModal}
         <Toaster richColors position="bottom-right" />
       </div>
     )
@@ -682,6 +675,29 @@ TOKEN = "${t}"
   }
 
   /* ════════════════════════════════════════════════
+     VIEW: LOGIN TOKEN INTRO (mandatory after registration)
+     ════════════════════════════════════════════════ */
+  if (view === 'login-token') {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#09090b] text-zinc-100">
+        {nav}
+        <main className="flex-1 flex items-center justify-center p-4 relative">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-amber-500/[0.03] blur-3xl" />
+          <div className="relative w-full max-w-lg fade-in-up">
+            <LoginTokenModalContent
+              userId={userId}
+              token={savedLoginToken}
+              onAcknowledge={() => { setView('dashboard'); toast.success('Welcome to MemBox! Create your first memory box below.') }}
+            />
+          </div>
+        </main>
+        <CreditFooter />
+        <Toaster richColors position="bottom-right" />
+      </div>
+    )
+  }
+
+  /* ════════════════════════════════════════════════
      VIEW: DASHBOARD
      ════════════════════════════════════════════════ */
   const activeBox = selectedBox
@@ -706,8 +722,8 @@ TOKEN = "${t}"
                   onKeyDown={(e) => e.key === 'Enter' && handleCreateBox()}
                   className="bg-white/[0.04] border-white/[0.08] text-zinc-100 placeholder:text-zinc-600 rounded-xl"
                 />
-                <Button onClick={handleCreateBox} disabled={!boxName.trim()} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium whitespace-nowrap">
-                  <Plus className="h-4 w-4 mr-1" /> Create
+                <Button onClick={handleCreateBox} disabled={!boxName.trim() || createBoxLoading} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium whitespace-nowrap">
+                  {createBoxLoading ? <div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <><Plus className="h-4 w-4 mr-1" /> Create</>}
                 </Button>
               </div>
             </div>
@@ -901,7 +917,6 @@ TOKEN = "${t}"
         )}
       </main>
       <CreditFooter />
-      {loginTokenModal}
       <Toaster richColors position="bottom-right" />
     </div>
   )
