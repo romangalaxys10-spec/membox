@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs'
 import path from 'path'
 
-const BASE_PATH = '/tmp/my-project/smailspace'
+const BASE_PATH = process.env.STORAGE_PATH || '/home/z/my-project/data/smailspace'
 
 export function getBoxPath(slug: string): string {
   return path.join(BASE_PATH, slug)

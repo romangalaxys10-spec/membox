@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { readFileContent, writeFileContent, deleteFileOrDir, listBoxFiles } from '@/lib/storage'
+import { readFileContent, writeFileContent, writeFileBinary, deleteFileOrDir, listBoxFiles, ensureBoxDir } from '@/lib/storage'
 
 async function authenticate(req: NextRequest, slug: string) {
   const authHeader = req.headers.get('authorization')
@@ -110,7 +110,7 @@ export async function PUT(
   }
 }
 
-// POST /api/m/[slug]/[...path] — Append to memory
+// POST /api/m/[slug]/[...path] — Upload files (multipart) or Append to memory
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string; path: string[] }> }
@@ -126,6 +126,47 @@ export async function POST(
     }
 
     const contentType = req.headers.get('content-type') || ''
+
+    // Handle multipart file upload when path is "upload"
+    if (pathSegments[0] === 'upload' && contentType.includes('multipart/form-data')) {
+      await ensureBoxDir(slug)
+      const formData = await req.formData()
+      const files = formData.getAll('files')
+      const folder = (formData.get('folder') as string)?.trim() || 'uploads'
+
+      if (!files.length) {
+        return NextResponse.json({ error: 'No files provided' }, { status: 400 })
+      }
+
+      const results: { name: string; path: string; size: number; status: string; error?: string }[] = []
+      let uploaded = 0
+      let failed = 0
+
+      for (const file of files) {
+        if (!(file instanceof File)) {
+          results.push({ name: String(file), path: '', size: 0, status: 'error', error: 'Not a file' })
+          failed++
+          continue
+        }
+        try {
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+          const safeFolder = folder.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.{2,}/g, '')
+          const relativePath = safeFolder ? `${safeFolder}/${safeName}` : safeName
+          const buffer = Buffer.from(await file.arrayBuffer())
+          await writeFileBinary(slug, relativePath, buffer)
+          results.push({ name: file.name, path: relativePath, size: buffer.length, status: 'ok' })
+          uploaded++
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Write failed'
+          results.push({ name: file.name, path: '', size: 0, status: 'error', error: msg })
+          failed++
+        }
+      }
+
+      return NextResponse.json({ uploaded, failed, results })
+    }
+
+    // Default: append text/JSON to memory
     let newContent: string
 
     if (contentType.includes('application/json')) {

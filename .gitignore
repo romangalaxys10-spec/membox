@@ -20,6 +20,7 @@ db/
 # Storage (user data - never commit)
 smailspace/
 /tmp/
+data/
 
 # Environment
 .env
