@@ -501,7 +501,18 @@ export default function Home() {
 
   useEffect(() => {
     const saved = getStoredUserId()
-    if (saved) { setUserIdState(saved); setUserIdInput(saved); setView('dashboard'); fetchBoxes(saved) }
+    if (!saved) return
+    // Verify the stored user still exists before auto-logging in
+    fetch(`/api/auth/check?username=${encodeURIComponent(saved)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.exists) {
+          setUserIdState(saved); setUserIdInput(saved); setView('dashboard'); fetchBoxes(saved)
+        } else {
+          clearStoredUser()
+        }
+      })
+      .catch(() => clearStoredUser())
   }, [])
 
   const fetchBoxes = useCallback(async (uid?: string) => {
@@ -575,7 +586,15 @@ export default function Home() {
         body: JSON.stringify({ name: boxName.trim(), userId }),
       })
       const data = await res.json()
-      if (data.error) { toast.error(data.error); return }
+      if (data.error) {
+        if (data.error.includes('not found') || data.error.includes('register')) {
+          toast.error('Session expired — please log in again.')
+          clearStoredUser(); setUserIdState(''); setView('landing')
+        } else {
+          toast.error(data.error)
+        }
+        return
+      }
       setBoxName(''); toast.success('MemBox created!'); fetchBoxes()
     } catch { toast.error('Failed to create MemBox') }
     finally { setCreateBoxLoading(false) }
