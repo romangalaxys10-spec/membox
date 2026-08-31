@@ -16,14 +16,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
 
-    // Auto-register user on first box creation
-    let isFirstBox = false
-    let loginToken: string | null = null
-    const existingUser = await db.user.findUnique({ where: { username: userId } })
-    if (!existingUser) {
-      isFirstBox = true
-      loginToken = 'login_' + generateToken().replace('mb_', '')
-      await db.user.create({ data: { username: userId, loginToken } })
+    // Verify user exists
+    const user = await db.user.findUnique({ where: { username: userId } })
+    if (!user) {
+      return NextResponse.json({ error: 'User not found. Please register first.' }, { status: 404 })
     }
 
     const slug = generateSlug()
@@ -35,20 +31,14 @@ export async function POST(req: NextRequest) {
 
     await ensureBoxDir(slug)
 
-    const result: Record<string, unknown> = {
+    return NextResponse.json({
       id: box.id,
       slug: box.slug,
       name: box.name,
       token: box.token,
       userId: box.userId,
       createdAt: box.createdAt,
-      isFirstBox,
-    }
-    if (isFirstBox && loginToken) {
-      result.loginToken = loginToken
-    }
-
-    return NextResponse.json(result)
+    })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error'
     return NextResponse.json({ error: message }, { status: 500 })

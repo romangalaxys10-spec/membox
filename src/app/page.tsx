@@ -174,6 +174,90 @@ function CreditFooter() {
   )
 }
 
+/* ── Login Token Modal (mandatory) ────────────── */
+function LoginTokenModalContent({ userId, token, onAcknowledge }: { userId: string; token: string; onAcknowledge: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const [ackChecked, setAckChecked] = useState(false)
+  const doCopy = async () => {
+    await navigator.clipboard.writeText(token)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <div className="relative w-full max-w-md rounded-2xl border border-amber-500/20 bg-zinc-900 p-6 sm:p-8 shadow-2xl fade-in">
+      {/* Warning header */}
+      <div className="flex items-center gap-3 mb-5">
+        <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+          <AlertTriangle className="h-5 w-5 text-amber-400" />
+        </div>
+        <div>
+          <h3 className="text-lg font-bold">Save Your Credentials</h3>
+          <p className="text-[11px] text-amber-400/80 mt-0.5">This is shown only once</p>
+        </div>
+      </div>
+
+      {/* Username */}
+      <div className="bg-zinc-950 rounded-xl p-4 mb-3 border border-white/[0.06]">
+        <Label className="text-[11px] text-zinc-500 uppercase tracking-widest">Username</Label>
+        <div className="flex items-center gap-2 mt-1.5">
+          <code className="flex-1 text-sm text-zinc-200 font-mono break-all">{userId}</code>
+          <CopyBtn text={userId} label="Copy" />
+        </div>
+      </div>
+
+      {/* Login Token */}
+      <div className="bg-zinc-950 rounded-xl p-4 mb-4 border border-amber-500/10">
+        <Label className="text-[11px] text-amber-400/70 uppercase tracking-widest">Login Token</Label>
+        <div className="flex items-center gap-2 mt-2">
+          <code className="flex-1 text-[13px] text-amber-300 font-mono break-all leading-relaxed select-all">{token}</code>
+          <CopyBtn text={token} label="Copy" />
+        </div>
+        <button
+          onClick={doCopy}
+          className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium hover:bg-amber-500/15 transition-colors"
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? 'Copied to clipboard!' : 'Copy Login Token to Clipboard'}
+        </button>
+      </div>
+
+      {/* Instructions */}
+      <div className="bg-zinc-950/50 rounded-xl p-4 mb-5 border border-white/[0.04]">
+        <p className="text-xs text-zinc-400 font-medium mb-2">How to log back in later:</p>
+        <ol className="text-xs text-zinc-500 leading-relaxed space-y-1 list-decimal list-inside">
+          <li>Save your username and login token <span className="text-amber-400 font-medium">offline</span> (notepad, password manager, etc.)</li>
+          <li>Go to MemBox and click <span className="text-zinc-300">Log In</span></li>
+          <li>Enter your username and this exact login token</li>
+        </ol>
+        <p className="text-[11px] text-red-400/80 mt-3 leading-relaxed">
+          Without this token you <span className="font-semibold">cannot</span> recover your account. There is no &quot;forgot password&quot; — save it now.
+        </p>
+      </div>
+
+      {/* Mandatory acknowledgment */}
+      <label className="flex items-start gap-3 mb-5 cursor-pointer group">
+        <div className="relative mt-0.5">
+          <input type="checkbox" checked={ackChecked} onChange={(e) => setAckChecked(e.target.checked)} className="peer sr-only" />
+          <div className="h-5 w-5 rounded-md border-2 border-zinc-700 bg-zinc-950 peer-checked:border-emerald-500 peer-checked:bg-emerald-500/10 transition-all flex items-center justify-center">
+            {ackChecked && <Check className="h-3 w-3 text-emerald-400" />}
+          </div>
+        </div>
+        <span className="text-xs text-zinc-400 leading-relaxed group-hover:text-zinc-300 transition-colors">
+          I have saved my username and login token to a safe place offline. I understand that without this token I cannot recover my account.
+        </span>
+      </label>
+
+      <Button
+        onClick={onAcknowledge}
+        disabled={!ackChecked}
+        className="w-full bg-zinc-100 text-zinc-950 hover:bg-zinc-200 font-medium h-11 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+      >
+        Continue to My Dashboard
+      </Button>
+    </div>
+  )
+}
+
 /* ════════════════════════════════════════════════════
    MAIN COMPONENT
    ════════════════════════════════════════════════════ */
@@ -200,6 +284,7 @@ export default function Home() {
   const [savedLoginToken, setSavedLoginToken] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [showLoginTokenModal, setShowLoginTokenModal] = useState(false)
+  const [registerLoading, setRegisterLoading] = useState(false)
 
   useEffect(() => {
     const saved = getStoredUserId()
@@ -221,14 +306,27 @@ export default function Home() {
   const handleRegister = async () => {
     const id = userIdInput.trim()
     if (!id) { toast.error('Please enter a username'); return }
-    // Check if user exists
+    setRegisterLoading(true)
     try {
-      const check = await fetch(`/api/auth/check?username=${encodeURIComponent(id)}`)
-      const { exists } = await check.json()
-      if (exists) { setView('login'); setLoginUsernameInput(id); return }
-    } catch { /* proceed */ }
-    setUserIdState(id); setStoredUserId(id); setBoxes([]); setSelectedBox(null)
-    setView('dashboard'); fetchBoxes(id); toast.success(`Welcome, ${id}!`)
+      const res = await fetch('/api/auth/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: id }),
+      })
+      const data = await res.json()
+      if (data.errorType === 'exists') {
+        setView('login'); setLoginUsernameInput(id)
+        setRegisterLoading(false)
+        toast.info('Account already exists. Please log in with your token.')
+        return
+      }
+      if (data.error) { toast.error(data.error); setRegisterLoading(false); return }
+      // New user created — show mandatory token intro
+      setUserIdState(id); setStoredUserId(id); setBoxes([]); setSelectedBox(null)
+      setSavedLoginToken(data.loginToken)
+      setShowLoginTokenModal(true)
+      setView('dashboard')
+    } catch { toast.error('Registration failed') }
+    finally { setRegisterLoading(false) }
   }
 
   const handleLogin = async () => {
@@ -263,10 +361,6 @@ export default function Home() {
       })
       const data = await res.json()
       if (data.error) { toast.error(data.error); return }
-      if (data.isFirstBox && data.loginToken) {
-        setSavedLoginToken(data.loginToken)
-        setShowLoginTokenModal(true)
-      }
       setBoxName(''); toast.success('MemBox created!'); fetchBoxes()
     } catch { toast.error('Failed to create MemBox') }
   }
@@ -401,39 +495,11 @@ TOKEN = "${t}"
   }
 
   /* ════════════════════════════════════════════════
-     LOGIN TOKEN MODAL (shown once on first box)
+     LOGIN TOKEN MODAL (mandatory on registration)
      ════════════════════════════════════════════════ */
   const loginTokenModal = showLoginTokenModal && savedLoginToken ? (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowLoginTokenModal(false)} />
-      <div className="relative w-full max-w-md rounded-2xl border border-amber-500/20 bg-zinc-900 p-6 sm:p-8 shadow-2xl fade-in">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-            <AlertTriangle className="h-4 w-4 text-amber-400" />
-          </div>
-          <h3 className="text-lg font-bold">Save Your Login Token</h3>
-        </div>
-        <p className="text-sm text-zinc-400 mb-5 leading-relaxed">
-          This is the <span className="text-amber-400 font-medium">only time</span> your login token will be shown.
-          Save it somewhere safe. You will need it to log back into your account.
-        </p>
-        <div className="bg-zinc-950 rounded-xl p-4 mb-5 border border-amber-500/10">
-          <Label className="text-[11px] text-amber-400/70 uppercase tracking-widest">Login Token</Label>
-          <div className="flex items-center gap-2 mt-2">
-            <code className="flex-1 text-sm text-amber-300 font-mono break-all leading-relaxed">{savedLoginToken}</code>
-            <CopyBtn text={savedLoginToken} label="Copy" />
-          </div>
-        </div>
-        <div className="bg-zinc-950/50 rounded-xl p-4 mb-6 border border-white/[0.04]">
-          <p className="text-xs text-zinc-500 leading-relaxed">
-            <span className="text-zinc-300 font-medium">How to log back in:</span> Go to the MemBox homepage and click &quot;Log In&quot;.
-            Enter your username (<code className="text-zinc-300">{userId}</code>) and this login token.
-          </p>
-        </div>
-        <Button onClick={() => setShowLoginTokenModal(false)} className="w-full bg-zinc-100 text-zinc-950 hover:bg-zinc-200 font-medium h-11 rounded-xl">
-          I have saved my token
-        </Button>
-      </div>
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />      <LoginTokenModalContent userId={userId} token={savedLoginToken} onAcknowledge={() => setShowLoginTokenModal(false)} />
     </div>
   ) : null
 
@@ -509,11 +575,11 @@ TOKEN = "${t}"
                     onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
                     className="bg-white/[0.04] border-white/[0.08] text-zinc-100 placeholder:text-zinc-600 h-11 rounded-xl focus:border-emerald-500/50"
                   />
-                  <Button onClick={handleRegister} className="bg-zinc-100 text-zinc-950 hover:bg-zinc-200 h-11 px-6 rounded-xl font-medium">
-                    Start <ChevronRight className="h-4 w-4 ml-0.5" />
+                  <Button onClick={handleRegister} disabled={registerLoading || !userIdInput.trim()} className="bg-zinc-100 text-zinc-950 hover:bg-zinc-200 h-11 px-6 rounded-xl font-medium disabled:opacity-50">
+                    {registerLoading ? <div className="h-4 w-4 rounded-full border-2 border-zinc-400 border-t-transparent animate-spin" /> : <>Start <ChevronRight className="h-4 w-4 ml-0.5" /></>}
                   </Button>
                 </div>
-                <p className="text-[11px] text-zinc-600 mt-3">Your first MemBox creates your account. A login token will be generated — save it.</p>
+                <p className="text-[11px] text-zinc-600 mt-3">Enter a username to register. You will receive a login token — <span className="text-amber-400/80">save it offline</span> to log back in later.</p>
               </div>
             </div>
           </section>
