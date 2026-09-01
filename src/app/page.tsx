@@ -388,6 +388,9 @@ function CreditFooter({ lang }: { lang: LangCode }) {
               <a href="https://claw.rommark.dev" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors inline-flex items-center gap-1">
                 LLM Tech Blog: claw.rommark.dev <ExternalLink className="h-2.5 w-2.5" />
               </a>
+              <a href="https://codetrendy.com/?utm_source=github.com&utm_medium=badge" target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center">
+                <img src="https://codetrendy.com/api/badge?style=classic" alt="Profiled on CodeTrendy" height={54} />
+              </a>
             </div>
           </div>
         </div>
