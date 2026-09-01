@@ -37,6 +37,16 @@
 
 </div>
 
+## What is MemBox?
+
+**MemBox is a free, persistent memory API for AI agents.** It gives AI coding assistants and autonomous agents — Claude Code, Cursor, Cline, GPT agents, LangChain, CrewAI, or any LLM-powered tool — long-term memory that survives across sessions. Create a MemBox, get a private API endpoint + token, and your agents can store, read, append, and search memories (text, JSON, documents, PDFs, codebases) over a simple REST API. No SDK, no database to run, no credit card — 100% free.
+
+**Keywords:** AI agent memory · persistent memory for AI agents · long-term memory API · LLM memory store · Claude Code memory · Cursor agent memory · RAG file storage · free alternative to Mem0 and Zep · agent context persistence · MCP memory server
+
+### Table of Contents
+
+- [The Story](#the-story) · [Features](#-features) · [Quick Start](#-quick-start) · [API Reference](#-api-reference) · [Use With AI Agents](#-use-with-ai-agents) · [FAQ](#-faq) · [How MemBox Compares](#-how-membox-compares) · [Tech Stack](#-tech-stack) · [Author](#-author) · [License](#-license)
+
 ---
 
 ## The Story
@@ -83,7 +93,7 @@ That's the promise of GLM 5 Turbo — and MemBox is living proof.
 ### Self-Host
 
 ```bash
-git clone https://github.com/roman-develops/membox.git
+git clone https://github.com/romangalaxys10-spec/membox.git
 cd membox
 npm install
 npx prisma db push
@@ -353,6 +363,47 @@ GLM 5 Turbo didn't just autocomplete code. It:
 - **Iterated on design** — frosted glass, gradients, micro-animations, responsive layout
 
 If you're a developer who wants to build at this speed, [try GLM 5 Turbo](https://z.ai/subscribe?ic=R0K78RJKNW) with 10% OFF using [this link](https://z.ai/subscribe?ic=R0K78RJKNW).
+
+---
+
+## ❓ FAQ
+
+**What is persistent memory for AI agents?**
+It's storage that lets an AI agent keep context — decisions, preferences, project state, documents — between sessions, instead of starting from zero every time. MemBox provides exactly this as a hosted REST API.
+
+**Is MemBox really free?**
+Yes. Unlimited boxes, unlimited storage, no credit card. Self-hosting is also free under the MIT license.
+
+**How is MemBox different from a vector database?**
+Vector DBs store embeddings for semantic search. MemBox stores *agent state*: exact memories, files, and documents addressable by path — like a tiny private cloud drive your agent can read and write. Use both together: MemBox for state, a vector DB for fuzzy retrieval.
+
+**Which AI agents work with MemBox?**
+Anything that can make HTTP calls: Claude Code, Cursor, Cline, Codex CLI, OpenClaw, LangChain, CrewAI, AutoGen, custom Python/Node agents, and MCP-compatible clients.
+
+**Do I need an SDK?**
+No. Plain REST — `PUT` to store, `GET` to read, `POST` to append, `DELETE` to remove. Copy-paste snippets for curl, Python, and Node.js are in the live UI.
+
+**Can agents store files, not just text?**
+Yes — up to 500 MB per file across 100+ types (PDF, DOCX, XLSX, images, audio, video, Parquet, ONNX, code files). Great for RAG pipelines that need source documents.
+
+**Is my data private?**
+Every box is protected by a unique secret token. Only holders of the token can read or write that box.
+
+**Can I self-host MemBox?**
+Yes — it's a single Next.js app with SQLite via Prisma. Clone, `npm install`, `npx prisma db push`, run. Full instructions in [Quick Start](#-quick-start).
+
+---
+
+## 📊 How MemBox Compares
+
+| | **MemBox** | Mem0 | Zep | Redis | Plain vector DB |
+|---|---|---|---|---|---|
+| Price | **Free, unlimited** | Paid tiers | Paid tiers | Self-host cost | Self-host cost |
+| Setup | **None — get a URL + token** | SDK + backend | SDK + backend | Run a server | Run a server + embedder |
+| Stores files (PDF, video…) | ✅ 100+ types | Limited | Limited | ❌ | ❌ |
+| Exact key/value agent state | ✅ | ❌ | ❌ | ✅ | ❌ |
+| REST-only, no SDK | ✅ | ❌ | ❌ | ❌ | ❌ |
+| MIT self-host | ✅ | Partial | ❌ | ❌ | Varies |
 
 ---
 
