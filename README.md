@@ -17,6 +17,10 @@
   <img src="https://sitepatent.com/api/badge?style=classic" alt="Profiled on SitePatent" height="54" />
 </a>
 
+<a href="https://mediapronet.com/?utm_source=github.com&utm_medium=badge" target="_blank" rel="nofollow noopener noreferrer">
+  <img src="https://mediapronet.com/api/badge?style=classic" alt="Profiled on MEDIAPRONET" height="54" />
+</a>
+
 <br/>
 <br/>
 
