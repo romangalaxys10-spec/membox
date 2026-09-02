@@ -569,6 +569,20 @@ export default function Home() {
   const changeLang = (l: LangCode) => { setLang(l); setStoredLang(l); document.documentElement.dir = isRTL(l) ? 'rtl' : 'ltr' }
   useEffect(() => { document.documentElement.dir = isRTL(lang) ? 'rtl' : 'ltr' }, [lang])
 
+  // Global reveal fallback: any .reveal element anywhere (e.g. the GLM invite CTA
+  // outside the section refs) gets observed, so it can never stay stuck invisible.
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      (entries) => { entries.forEach(entry => { if (entry.isIntersecting) { entry.target.classList.add('visible'); obs.unobserve(entry.target) } }) },
+      { threshold: 0.1, rootMargin: '0px 0px -30px 0px' }
+    )
+    const scan = () => document.querySelectorAll('.reveal:not(.visible)').forEach(el => obs.observe(el))
+    scan()
+    const mo = new MutationObserver(scan)
+    mo.observe(document.body, { childList: true, subtree: true })
+    return () => { obs.disconnect(); mo.disconnect() }
+  }, [])
+
   useEffect(() => {
     const saved = getStoredUserId()
     if (!saved) return
