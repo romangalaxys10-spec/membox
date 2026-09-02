@@ -356,9 +356,23 @@ Users can go one step further and **pair their own private GitHub repo** — the
 
 In the dashboard, the **GitHub Brain** card walks the user through:
 
-1. [Create a new repo](https://github.com/new) → pick **Private**, name it anything (e.g. `my-membox-brain`), click **Create repository**.
-2. [Create a fine-grained personal access token](https://github.com/settings/personal-access-tokens/new): set **Repository access → Only select repositories → [your repo]**, and **Permissions → Repository permissions → Contents → Read and write**. Then click **Generate token** and copy it (starts with `github_pat_`).
-3. Paste `owner/repo` + the token into the card. MemBox validates access against the GitHub API and stores the token **AES-256-GCM encrypted** (`APP_SECRET` env var required on the server). The raw token is never logged or returned.
+1. [Create a fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) with **Repository access → All repositories**, **Contents → Read and write**, and **Administration → Read and write** (MemBox creates your private brain repo for you). Copy the token (starts with `github_pat_`).
+2. In the card, enter just a **repo name** (e.g. `my-membox-brain`) and paste the token — that's all. MemBox detects your GitHub username from the token, **creates the private repo if it doesn't exist**, and scaffolds the folder structure.
+3. Done. The token is stored **AES-256-GCM encrypted** (`APP_SECRET` env var required on the server); the raw token is never logged or returned. Pairing state is kept as an encrypted file in the storage repo so every server instance sees it instantly.
+
+Inside your repo, MemBox maintains a tidy layout — one folder per box, named after your box:
+
+```
+my-membox-brain/
+└ membox/
+   ├ README.md                  # auto-generated explainer
+   ├ my-coding-agent-a1b2c3/    # one folder per MemBox (box name + short id)
+   │  └ ...memory files
+   └ writer-bot-9f8e7d/
+      └ ...memory files
+```
+
+Every memory write is a git commit — browse or roll back your AI's memory history anytime.
 
 Once paired, that user's memory writes, reads, uploads, deletes, listings and even search run against their repo. Unpairing from the card (or revoking the token on GitHub) stops all access.
 

@@ -1193,8 +1193,8 @@ function GithubPairCard({ username }: { username: string }) {
           </h3>
           <p className="text-sm text-zinc-400 mt-1">
             {pairedRepo
-              ? <>Your memories are stored in your own private repo <span className="text-emerald-400 font-mono">{pairedRepo}</span>.</>
-              : 'Pair your own private GitHub repo — your boxes then store memories there instead of MemBox storage.'}
+              ? <>Your memories are stored in your own private repo <span className="text-emerald-400 font-mono">{pairedRepo}</span> under <code className="text-zinc-300">membox/</code> — one folder per box.</>
+              : 'Pair your own private GitHub repo — your boxes then store memories there instead of MemBox storage. We create the repo and folders for you.'}
           </p>
         </div>
         {pairedRepo ? (
@@ -1212,24 +1212,19 @@ function GithubPairCard({ username }: { username: string }) {
         <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-4 text-sm text-zinc-300">
           <ol className="list-decimal list-inside space-y-2 text-zinc-400">
             <li>
-              <a href="https://github.com/new" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline decoration-emerald-500/40 hover:decoration-emerald-400">Create a new private repo on GitHub</a>
-              <span className="text-zinc-500"> → </span>
-              <span className="text-zinc-200">pick "Private"</span>, give it any name (e.g. <code className="text-emerald-300">my-membox-brain</code>), click <span className="text-zinc-200">"Create repository"</span>. Done — nothing else on this page.
-            </li>
-            <li>
               <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline decoration-emerald-500/40 hover:decoration-emerald-400">Create the access token on GitHub</a>
               <span className="text-zinc-500"> → </span>fill in exactly 3 things:
               <div className="ml-6 mt-1 text-xs text-zinc-500 space-y-1">
                 <div>1. <span className="text-zinc-300">Token name</span>: anything, e.g. <code className="text-emerald-300">membox</code></div>
-                <div>2. <span className="text-zinc-300">Repository access</span>: choose <span className="text-zinc-300">"Only select repositories"</span> → pick your <code className="text-emerald-300">my-membox-brain</code> repo</div>
-                <div>3. <span className="text-zinc-300">Permissions → Repository permissions → Contents</span>: set to <span className="text-zinc-300">"Read and write"</span>. Leave everything else alone.</div>
+                <div>2. <span className="text-zinc-300">Repository access</span>: choose <span className="text-zinc-300">"All repositories"</span> (MemBox will create your private brain repo for you automatically)</div>
+                <div>3. <span className="text-zinc-300">Permissions → Repository permissions → Contents</span>: set to <span className="text-zinc-300">"Read and write"</span> — also enable <span className="text-zinc-300">Administration: Read and write</span> so MemBox can create the repo. Leave everything else alone.</div>
                 <div>Then click <span className="text-zinc-300">"Generate token"</span> at the bottom and <span className="text-zinc-300">copy the token</span> it shows (starts with <code>github_pat_</code>).</div>
               </div>
             </li>
-            <li>Come back here: paste the repo name (<code className="text-emerald-300">yourname/my-membox-brain</code>) and the token below, and hit <span className="text-zinc-200">Pair repo</span>. MemBox checks it works and saves the token encrypted — GitHub never sees your memories, and MemBox never sees your token in plain text.</li>
+            <li>Come back here: think of a name for your brain repo (e.g. <code className="text-emerald-300">my-membox-brain</code>) and the token — that's all. MemBox finds your GitHub username from the token, <span className="text-zinc-200">creates the private repo if it doesn't exist</span>, and sets up the folder structure automatically.</li>
           </ol>
           <div className="grid sm:grid-cols-2 gap-3">
-            <input value={repo} onChange={e => setRepo(e.target.value)} placeholder="owner/my-membox-brain"
+            <input value={repo} onChange={e => setRepo(e.target.value)} placeholder="my-membox-brain (repo name — we do the rest)"
               className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 font-mono text-sm focus:outline-none focus:border-emerald-500/50" />
             <input value={token} onChange={e => setToken(e.target.value)} placeholder="github_pat_..." type="password"
               className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 font-mono text-sm focus:outline-none focus:border-emerald-500/50" />

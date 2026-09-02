@@ -21,6 +21,47 @@ export interface GhCtx {
   repo: string
   token: string
   branch?: string
+  prefix?: string  // folder root inside the repo (default: 'boxes')
+}
+
+// Authenticated user login + repo existence/creation helpers used by pairing.
+// All calls are pinned to https://api.github.com; token comes from the pairing
+// request and is never logged.
+export async function ghGetLogin(token: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+      redirect: 'error', cache: 'no-store',
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    return typeof json.login === 'string' ? json.login : null
+  } catch { return null }
+}
+
+export async function ghRepoExists(repo: string, token: string): Promise<boolean | null> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${encodeURIComponent(repo)}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+      redirect: 'error', cache: 'no-store',
+    })
+    if (res.status === 404) return false
+    return res.ok
+  } catch { return null }
+}
+
+export async function ghCreatePrivateRepo(name: string, token: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch('https://api.github.com/user/repos', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
+      redirect: 'error', cache: 'no-store',
+      body: JSON.stringify({ name, private: true, description: 'My MemBox brain — AI agent memories (managed by MemBox)' }),
+    })
+    if (res.ok || res.status === 422) return { ok: true } // 422 = already exists
+    if (res.status === 403 || res.status === 404) return { ok: false, error: 'Token is not allowed to create repositories (fine-grained tokens must select this repo, or the repo must already exist)' }
+    return { ok: false, error: `GitHub returned ${res.status} while creating the repo` }
+  } catch { return { ok: false, error: 'Could not reach GitHub' } }
 }
 
 export function ctxFor(repo: string, token: string, branch = 'main'): GhCtx | null {

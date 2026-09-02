@@ -86,11 +86,11 @@ export async function GET(
     if (sctx) {
       // User's repo is remote: walk it and search contents directly
       const files: { p: string; size: number }[] = []
-      try { await ghWalkFiles(`boxes/${slug}`, (p, size) => { files.push({ p, size }) }, sctx) } catch { /* ignore */ }
+      try { await ghWalkFiles(`${sctx?.prefix || `boxes/${slug}`}`, (p, size) => { files.push({ p, size }) }, sctx) } catch { /* ignore */ }
       for (const { p, size } of files) {
         if (results.length >= limit) break
         if (size > 1024 * 512) continue
-        const rel = p.replace(`boxes/${slug}/`, '')
+        const rel = p.replace(`${sctx?.prefix || `boxes/${slug}`}/`, '')
         try {
           if (rel.toLowerCase().includes(qLower)) {
             results.push({ path: rel, type: 'file', match: 'name' })
