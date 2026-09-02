@@ -181,7 +181,7 @@ export async function ghWalkFiles(
 ): Promise<void> {
   const entries = await ghListDir(prefix, creds)
   for (const entry of entries) {
-    const child = `${prefix}/${entry.name}`
+    const child = prefix ? `${prefix}/${entry.name}` : entry.name
     if (entry.type === 'directory') {
       await ghWalkFiles(child, collect, creds)
     } else {

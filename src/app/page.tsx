@@ -1152,9 +1152,13 @@ function GithubExplorer({ username, repo }: { username: string; repo: string }) 
   const [file, setFile] = useState<{ path: string; content?: string; tooLarge?: boolean; size?: number } | null>(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [results, setResults] = useState<{ path: string; size: number }[] | null>(null)
+  const [commits, setCommits] = useState<{ sha: string; message: string; date: string | null }[] | null>(null)
 
   const load = useCallback(async (p: string) => {
-    setLoading(true); setErr(''); setFile(null)
+    setLoading(true); setErr(''); setFile(null); setResults(null)
     try {
       const res = await fetch(`/api/auth/github/explore?username=${encodeURIComponent(username)}&path=${encodeURIComponent(p)}`)
       const d = await res.json()
@@ -1164,6 +1168,41 @@ function GithubExplorer({ username, repo }: { username: string; repo: string }) 
     } catch { setErr('Network error') }
     setLoading(false)
   }, [username])
+
+  async function runSearch(e?: React.FormEvent) {
+    e?.preventDefault()
+    const q = query.trim()
+    if (!q) { setResults(null); return }
+    setSearching(true); setErr(''); setFile(null)
+    try {
+      const res = await fetch(`/api/auth/github/explore?username=${encodeURIComponent(username)}&search=${encodeURIComponent(q)}`)
+      const d = await res.json()
+      setResults(d.matches ?? [])
+    } catch { setErr('Network error') }
+    setSearching(false)
+  }
+
+  async function loadCommits() {
+    if (commits) { setCommits(null); return }
+    try {
+      const res = await fetch(`/api/auth/github/explore?username=${encodeURIComponent(username)}&commits=1`)
+      const d = await res.json()
+      setCommits(d.commits ?? [])
+    } catch { setErr('Network error') }
+  }
+
+  async function download(fpath: string) {
+    try {
+      const res = await fetch(`/api/auth/github/explore?username=${encodeURIComponent(username)}&path=${encodeURIComponent(fpath)}&raw=1`)
+      if (!res.ok) { setErr('Download failed'); return }
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = fpath.split('/').pop() || 'file'
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch { setErr('Download failed') }
+  }
 
   useEffect(() => { if (repo) load('') }, [repo, load])
   if (!repo) return null
@@ -1186,11 +1225,49 @@ function GithubExplorer({ username, repo }: { username: string; repo: string }) 
             </span>
           ))}
         </div>
-        <span className="text-[10px] uppercase tracking-wider text-zinc-600">data explorer</span>
+        <div className="flex items-center gap-2">
+          <button onClick={loadCommits} className="text-[10px] uppercase tracking-wider text-zinc-500 hover:text-emerald-300">🕘 history</button>
+          <span className="text-[10px] uppercase tracking-wider text-zinc-600">data explorer</span>
+        </div>
       </div>
+      <form onSubmit={runSearch} className="mb-3 flex gap-2">
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="🔎 Search files in your repo…"
+          className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-emerald-500/50" />
+        <button type="submit" disabled={searching} className="px-3 py-1.5 rounded-lg border border-emerald-500/30 text-emerald-300 text-xs hover:bg-emerald-500/10 disabled:opacity-40">
+          {searching ? '…' : 'Search'}
+        </button>
+      </form>
       {loading && <p className="text-xs text-zinc-500">Loading…</p>}
       {err && <p className="text-xs text-red-400">{err}</p>}
-      {!loading && !file && (
+      {commits && (
+        <div className="mb-3 space-y-1 max-h-48 overflow-auto">
+          {commits.length === 0 && <p className="text-xs text-zinc-600">No commits yet</p>}
+          {commits.map(c => (
+            <div key={c.sha} className="flex items-center gap-2 text-xs px-3 py-1 rounded-lg hover:bg-white/[0.03]">
+              <code className="text-emerald-400/70">{c.sha}</code>
+              <span className="text-zinc-400 truncate flex-1">{c.message}</span>
+              {c.date && <span className="text-zinc-600 text-[10px] whitespace-nowrap">{new Date(c.date).toLocaleDateString()}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {results && (
+        <div className="mb-3">
+          <p className="text-xs text-zinc-500 mb-1">{results.length} match{results.length === 1 ? '' : 'es'} for “{query}”</p>
+          <div className="space-y-1 max-h-60 overflow-auto">
+            {results.map(r => (
+              <button key={r.path} onClick={() => { setResults(null); setQuery(''); const dir = r.path.split('/').slice(0, -1).join('/'); load(dir).then(() => load(r.path)) }}
+                className="flex items-center gap-2 text-left px-3 py-1.5 rounded-lg hover:bg-white/[0.04] text-xs w-full">
+                <span aria-hidden>📄</span>
+                <span className="font-mono text-zinc-300 hover:text-white truncate">{r.path}</span>
+                <span className="ml-auto text-[10px] text-zinc-600">{r.size > 1024 ? `${(r.size / 1024).toFixed(1)} KB` : `${r.size} B`}</span>
+              </button>
+            ))}
+            {results.length === 0 && <p className="text-xs text-zinc-600">Nothing found</p>}
+          </div>
+        </div>
+      )}
+      {!loading && !file && results === null && (
         <div className="grid sm:grid-cols-2 gap-1">
           {entries.length === 0 && !loading && <p className="text-xs text-zinc-600">Empty</p>}
           {entries.map(e => (
@@ -1210,8 +1287,14 @@ function GithubExplorer({ username, repo }: { username: string; repo: string }) 
           <button onClick={() => load(file.path.split('/').slice(0, -1).join('/'))} className="text-xs text-emerald-400 hover:text-emerald-300 mb-2">
             ← back to folder
           </button>
+          <div className="flex items-center justify-between mb-2">
+            <code className="text-[10px] text-zinc-500 truncate">{file.path}</code>
+            <button onClick={() => download(file.path)} className="text-xs px-3 py-1 rounded-lg border border-white/10 text-zinc-300 hover:border-emerald-500/40 hover:text-emerald-300 transition-colors whitespace-nowrap">
+              ⬇ Download
+            </button>
+          </div>
           {file.tooLarge ? (
-            <p className="text-xs text-zinc-500">File is too large to preview ({((file.size || 0) / 1024).toFixed(0)} KB). Download it via the box API instead.</p>
+            <p className="text-xs text-zinc-500">File is too large to preview ({((file.size || 0) / 1024).toFixed(0)} KB) — use the Download button above.</p>
           ) : (
             <pre className="text-[11px] leading-relaxed font-mono bg-black/40 border border-white/[0.06] rounded-xl p-4 overflow-auto max-h-96 text-zinc-300 whitespace-pre-wrap break-all">
               {pretty ?? file.content}
