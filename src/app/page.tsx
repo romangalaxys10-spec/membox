@@ -33,6 +33,52 @@ interface UploadResult {
 
 type View = 'landing' | 'dashboard' | 'login-token' | 'login'
 
+/* ── Apple Magic: Hooks ─────────────────────── */
+function useReveal() {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add('visible'); obs.unobserve(el) } },
+      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+    )
+    el.querySelectorAll('.reveal').forEach(child => obs.observe(child))
+    if (el.classList.contains('reveal')) obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+  return ref
+}
+
+function useMagnetic() {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const onMove = (e: MouseEvent) => {
+      const r = el.getBoundingClientRect()
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2
+      const dx = (e.clientX - cx) / r.width, dy = (e.clientY - cy) / r.height
+      el.style.transform = `translate(${dx * 6}px, ${dy * 4}px)`
+    }
+    const onLeave = () => { el.style.transform = 'translate(0, 0)' }
+    el.addEventListener('mousemove', onMove)
+    el.addEventListener('mouseleave', onLeave)
+    return () => { el.removeEventListener('mousemove', onMove); el.removeEventListener('mouseleave', onLeave) }
+  }, [])
+  return ref
+}
+
+function useNavScroll() {
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > 20)
+    window.addEventListener('scroll', fn, { passive: true })
+    return () => window.removeEventListener('scroll', fn)
+  }, [])
+  return scrolled
+}
+
 /* ── Helpers ──────────────────────────────────── */
 function getStoredUserId() { if (typeof window === 'undefined') return ''; return localStorage.getItem('membox-user-id') || '' }
 function setStoredUserId(id: string) { localStorage.setItem('membox-user-id', id) }
@@ -313,8 +359,8 @@ function FileBrowser({ slug, token, onRefresh, lang }: { slug: string; token: st
 /* ── GLM Invite CTA ───────────────────────────── */
 function GLMInviteCTA({ lang }: { lang: LangCode }) {
   return (
-    <section className="max-w-3xl mx-auto px-4 sm:px-6 py-16 fade-in-up">
-      <div className="relative rounded-2xl overflow-hidden border border-white/[0.08]">
+    <section className="max-w-3xl mx-auto px-4 sm:px-6 py-16">
+      <div className="relative rounded-2xl overflow-hidden border border-white/[0.08] cta-glow transition-all duration-700">
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-amber-500/10" />
         <div className="relative p-8 sm:p-10 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium mb-6">
@@ -322,7 +368,7 @@ function GLMInviteCTA({ lang }: { lang: LangCode }) {
             {t(lang, 'glm.badge')}
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-3">
-            {t(lang, 'glm.title')} <span className="glow-text-warm">{t(lang, 'glm.highlight')}</span>
+            {t(lang, 'glm.title')} <span className="glow-text-warm shimmer-text" style={{ position: 'relative', display: 'inline-block' }}>{t(lang, 'glm.highlight')}</span>
           </h2>
           <p className="text-zinc-400 text-sm sm:text-base max-w-xl mx-auto mb-8 leading-relaxed">
             {t(lang, 'glm.desc')}
@@ -332,7 +378,7 @@ function GLMInviteCTA({ lang }: { lang: LangCode }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Button className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-semibold h-12 px-8 text-sm rounded-xl shadow-lg shadow-amber-500/20 transition-all hover:shadow-amber-500/30 hover:scale-[1.02]">
+            <Button className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-semibold h-12 px-8 text-sm rounded-xl shadow-lg shadow-amber-500/20 transition-all duration-300 hover:shadow-amber-500/30 hover:scale-[1.03] active:scale-[0.98]">
               {t(lang, 'glm.btn')}
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
@@ -519,6 +565,7 @@ export default function Home() {
   const [loginTab, setLoginTab] = useState<'login' | 'signup'>('login')
   const [lang, setLang] = useState<LangCode>(getStoredLang)
   const [langMenuOpen, setLangMenuOpen] = useState(false)
+  const navScrolled = useNavScroll()
   const changeLang = (l: LangCode) => { setLang(l); setStoredLang(l); document.documentElement.dir = isRTL(l) ? 'rtl' : 'ltr' }
   useEffect(() => { document.documentElement.dir = isRTL(lang) ? 'rtl' : 'ltr' }, [lang])
 
@@ -756,10 +803,10 @@ TOKEN = "${t}"
      NAV (shared)
      ════════════════════════════════════════════════ */
   const nav = (
-    <header className="sticky top-0 z-50 glass border-b border-white/[0.06]">
+    <header className={`sticky top-0 z-50 transition-all duration-500 ${navScrolled ? 'glass-nav-scrolled border-b border-white/[0.08]' : 'glass border-b border-white/[0.06]'}`}>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={() => { if (userId) { setSelectedBox(null); setView('dashboard') } else { setView('landing') } }}>
-          <div className="h-8 w-8 rounded-xl bg-emerald-500/15 flex items-center justify-center border border-emerald-500/10">
+        <div className="flex items-center gap-3 cursor-pointer logo-hover" onClick={() => { if (userId) { setSelectedBox(null); setView('dashboard') } else { setView('landing') } }}>
+          <div className="h-8 w-8 rounded-xl bg-emerald-500/15 flex items-center justify-center border border-emerald-500/10 transition-all duration-300">
             <Brain className="h-4 w-4 text-emerald-400" />
           </div>
           <span className="font-semibold text-base tracking-tight">MemBox</span>
@@ -804,6 +851,9 @@ TOKEN = "${t}"
      VIEW: LANDING PAGE
      ════════════════════════════════════════════════ */
   if (view === 'landing') {
+    const heroMag = useMagnetic()
+    const featuresRef = useReveal()
+    const typesRef = useReveal()
     return (
       <div className="min-h-screen flex flex-col bg-[#09090b] text-zinc-100" dir={isRTL(lang) ? 'rtl' : 'ltr'}>
         {nav}
@@ -811,10 +861,11 @@ TOKEN = "${t}"
           {/* Hero */}
           <section className="flex-1 flex items-center justify-center relative overflow-hidden">
             <div className="absolute inset-0 glow-emerald" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-500/[0.03] blur-3xl" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-500/[0.03] blur-3xl float-orb" />
+            <div className="absolute top-1/3 left-1/3 w-[300px] h-[300px] rounded-full bg-emerald-500/[0.02] blur-3xl float-orb-slow" />
             <div className="relative max-w-3xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
               <div className="fade-in">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-zinc-400 mb-8">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-zinc-400 mb-8 transition-all duration-300 hover:bg-white/[0.06] hover:border-white/[0.12]">
                   <Zap className="h-3.5 w-3.5 text-emerald-400" />
                   {t(lang, 'hero.badge')}
                 </div>
@@ -822,31 +873,31 @@ TOKEN = "${t}"
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.1] mb-6 fade-in-up">
                 {t(lang, 'hero.h1a')}
                 <br />
-                <span className="glow-text">{t(lang, 'hero.h1b')}</span>
+                <span className="glow-text shimmer-text inline-block" style={{ position: 'relative', display: 'inline-block' }}>{t(lang, 'hero.h1b')}</span>
               </h1>
               <p className="text-base sm:text-lg text-zinc-500 max-w-xl mx-auto mb-10 leading-relaxed fade-in-up fade-in-delay-1">
                 {t(lang, 'hero.desc')}
               </p>
-              <div className="max-w-sm mx-auto fade-in-up fade-in-delay-2">
-                <div className="flex gap-2">
+              <div className="max-w-sm mx-auto fade-in-up fade-in-delay-2" ref={heroMag}>
+                <div className="magnetic-btn flex gap-2 rounded-2xl">
                   <Input
                     placeholder={t(lang, 'hero.placeholder')}
                     value={userIdInput}
                     onChange={(e) => setUserIdInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
-                    className="bg-white/[0.04] border-white/[0.08] text-zinc-100 placeholder:text-zinc-600 h-11 rounded-xl focus:border-emerald-500/50"
+                    className="bg-white/[0.04] border-white/[0.08] text-zinc-100 placeholder:text-zinc-600 h-11 rounded-xl focus:border-emerald-500/50 apple-focus transition-all duration-300"
                   />
-                  <Button onClick={handleRegister} disabled={registerLoading || !userIdInput.trim()} className="bg-zinc-100 text-zinc-950 hover:bg-zinc-200 h-11 px-6 rounded-xl font-medium disabled:opacity-50">
+                  <Button onClick={handleRegister} disabled={registerLoading || !userIdInput.trim()} className="bg-zinc-100 text-zinc-950 hover:bg-zinc-200 h-11 px-6 rounded-xl font-medium disabled:opacity-50 transition-all duration-200 active:scale-95">
                     {registerLoading ? <div className="h-4 w-4 rounded-full border-2 border-zinc-400 border-t-transparent animate-spin" /> : <>{t(lang, 'hero.start')} <ChevronRight className="h-4 w-4 ml-0.5" /></>}
                   </Button>
                 </div>
-                <p className="text-[11px] text-zinc-600 mt-3">{(() => { const hint = t(lang, 'hero.hint'); const hl = t(lang, 'hero.hintHighlight'); const idx = hint.indexOf(hl); if (idx === -1) return hint; return <>{hint.slice(0, idx)}<span className="text-amber-400/80">{hl}</span>{hint.slice(idx + hl.length)}</>; })()}</p>
+                <p className="text-[11px] text-zinc-600 mt-3">{(() => { const hint = t(lang, 'hero.hint'); const hl = t(lang, 'hero.hintHighlight'); const idx = hint.indexOf(hl); if (idx === -1) return hint; return <>{hint.slice(0, idx)}<span className="text-amber-400/80" style={{ transition: 'color 0.3s' }}>{hl}</span>{hint.slice(idx + hl.length)}</>; })()}</p>
               </div>
             </div>
           </section>
 
           {/* Features */}
-          <section className="max-w-5xl mx-auto px-4 sm:px-6 pb-16">
+          <section className="max-w-5xl mx-auto px-4 sm:px-6 pb-16" ref={featuresRef}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
                 { icon: Zap, tk: 'setup' },
@@ -856,7 +907,7 @@ TOKEN = "${t}"
                 { icon: HardDrive, tk: 'storage' },
                 { icon: FolderOpen, tk: 'paths' },
               ].map((f, i) => (
-                <div key={f.tk} className={`rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 card-hover fade-in-up fade-in-delay-${Math.min(i, 3)}`}>
+                <div key={f.tk} className={`rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 card-hover reveal reveal-delay-${Math.min(i, 5)}`}>
                   <div className="flex items-center gap-2 mb-2.5">
                     <div className="h-7 w-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                       <f.icon className="h-3.5 w-3.5 text-emerald-400" />
@@ -867,17 +918,17 @@ TOKEN = "${t}"
                 </div>
               ))}
             </div>
-            <div className="mt-12 text-center fade-in-up fade-in-delay-3">
+            <div className="mt-12 text-center reveal">
               <p className="text-xs text-zinc-600 uppercase tracking-widest mb-3">{t(lang, 'feat.fileTypes')}</p>
               <div className="flex flex-wrap justify-center gap-1.5">
                 {['PDF', 'Word', 'Excel', 'PowerPoint', 'CSV', 'JSON', 'YAML', 'Markdown', 'Images', 'Audio', 'Video', 'Archives', 'Code', 'Parquet', 'ONNX'].map((ft) => (
-                  <span key={ft} className="px-2.5 py-1 rounded-md bg-white/[0.03] border border-white/[0.06] text-[11px] text-zinc-500">{ft}</span>
+                  <span key={ft} className="px-2.5 py-1 rounded-md bg-white/[0.03] border border-white/[0.06] text-[11px] text-zinc-500 pill-lift cursor-default">{ft}</span>
                 ))}
               </div>
             </div>
           </section>
 
-          <GLMInviteCTA lang={lang} />
+          <div className="reveal"><GLMInviteCTA lang={lang} /></div>
         </main>
         <CreditFooter lang={lang} />
         <Toaster richColors position="bottom-right" />
