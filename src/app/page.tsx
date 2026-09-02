@@ -566,6 +566,11 @@ export default function Home() {
   const [lang, setLang] = useState<LangCode>(getStoredLang)
   const [langMenuOpen, setLangMenuOpen] = useState(false)
   const navScrolled = useNavScroll()
+  // Hooks must run unconditionally (React rules of hooks) — calling them inside
+  // a view branch crashed the app whenever the view changed after mount.
+  const heroMag = useMagnetic()
+  const featuresRef = useReveal()
+  const typesRef = useReveal()
   const changeLang = (l: LangCode) => { setLang(l); setStoredLang(l); document.documentElement.dir = isRTL(l) ? 'rtl' : 'ltr' }
   useEffect(() => { document.documentElement.dir = isRTL(lang) ? 'rtl' : 'ltr' }, [lang])
 
@@ -865,9 +870,6 @@ TOKEN = "${t}"
      VIEW: LANDING PAGE
      ════════════════════════════════════════════════ */
   if (view === 'landing') {
-    const heroMag = useMagnetic()
-    const featuresRef = useReveal()
-    const typesRef = useReveal()
     return (
       <div className="min-h-screen flex flex-col bg-[#09090b] text-zinc-100" dir={isRTL(lang) ? 'rtl' : 'ltr'}>
         {nav}
