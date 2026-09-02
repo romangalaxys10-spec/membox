@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWriteAccess, rateLimitByKey, recordAnalytics, emitWebhook } from '@/lib/auth'
 import { readFileContent, writeFileContent, deleteFileOrDir, listBoxFiles } from '@/lib/storage'
+import { storageCtxForBox } from '@/lib/user-storage'
 import { setTtl, removeTtl } from '@/lib/ttl'
 
 type BatchOp = { method: 'GET' | 'PUT' | 'DELETE'; path: string; content?: string; ttl?: number }
@@ -15,6 +16,7 @@ export async function POST(
   if (rlError) return rlError
 
   const { error, box } = await requireWriteAccess(req, slug)
+  const sctx = await storageCtxForBox(slug)
   if (error) return error
 
   try {
@@ -40,12 +42,12 @@ export async function POST(
 
         if (op.method === 'PUT') {
           const content = typeof op.content === 'string' ? op.content : JSON.stringify(op.content, null, 2)
-          await writeFileContent(slug, filePath, content)
+          await writeFileContent(slug, filePath, content, sctx)
           if (op.ttl) await setTtl(box!.id, filePath, op.ttl)
           await emitWebhook(box!.id, 'write', slug, filePath)
           results.push({ path: filePath, method: 'PUT', status: 200, data: { message: 'Stored' } })
         } else if (op.method === 'GET') {
-          const content = await readFileContent(slug, filePath)
+          const content = await readFileContent(slug, filePath, sctx)
           if (content === null) {
             results.push({ path: filePath, method: 'GET', status: 404, error: 'Not found' })
           } else {

@@ -350,6 +350,18 @@ If these are absent, MemBox transparently falls back to local filesystem storage
 - ⚠️ GitHub Contents API limits: ~5,000 requests/hour per token; files up to ~25 MB per commit are practical. Rate limit headers are honored per-box.
 - ⚠️ Checkpoints are last-writer-wins: two instances committing a DB checkpoint in the same instant can race (acceptable for personal/light team use).
 
+### Bring Your Own Repo (per-user pairing)
+
+Users can go one step further and **pair their own private GitHub repo** — their boxes then store memories in *their* repo instead of the server's storage. MemBox never keeps the data; the user keeps full ownership, history and revocation control (delete the token on GitHub and access ends).
+
+In the dashboard, the **GitHub Brain** card walks the user through:
+
+1. Create a **private** repo (any name).
+2. Create a **fine-grained personal access token**: *Repository access → Only select repositories → [your repo]*, and *Permissions → Contents → Read and write*. Nothing else.
+3. Paste `owner/repo` + the token into the card. MemBox validates access against the GitHub API and stores the token **AES-256-GCM encrypted** (`APP_SECRET` env var required on the server). The raw token is never logged or returned.
+
+Once paired, that user's memory writes, reads, uploads, deletes, listings and even search run against their repo. Unpairing from the card (or revoking the token on GitHub) stops all access.
+
 **SSRF hardening** (`src/lib/github-store.ts`): requests are pinned to `https://api.github.com` via `new URL()` + allowlist checks, the repo slug must match `owner/name`, storage paths reject `..` segments, and redirects are refused.
 
 ## 📍 Architecture

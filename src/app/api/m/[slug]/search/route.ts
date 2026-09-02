@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticate, rateLimitByKey, recordAnalytics } from '@/lib/auth'
 import { readFileContent, listBoxFiles, getFilePath, getBoxPath } from '@/lib/storage'
+import { storageCtxForBox } from '@/lib/user-storage'
+import { ghWalkFiles, ghGetFile } from '@/lib/github-store'
 import { promises as fs } from 'fs'
 import path from 'path'
 
@@ -15,6 +17,7 @@ export async function GET(
 
   const { error, box } = await authenticate(req, slug)
   if (error) return error
+  const sctx = await storageCtxForBox(slug)
 
   const q = req.nextUrl.searchParams.get('q') || ''
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get('limit') || '50'), 200)
@@ -80,7 +83,33 @@ export async function GET(
       }
     }
 
-    await searchDir(boxPath, '')
+    if (sctx) {
+      // User's repo is remote: walk it and search contents directly
+      const files: { p: string; size: number }[] = []
+      try { await ghWalkFiles(`boxes/${slug}`, (p, size) => { files.push({ p, size }) }, sctx) } catch { /* ignore */ }
+      for (const { p, size } of files) {
+        if (results.length >= limit) break
+        if (size > 1024 * 512) continue
+        const rel = p.replace(`boxes/${slug}/`, '')
+        try {
+          if (rel.toLowerCase().includes(qLower)) {
+            results.push({ path: rel, type: 'file', match: 'name' })
+            continue
+          }
+          const ext = path.extname(rel).toLowerCase()
+          const textExts = ['.txt', '.md', '.json', '.yaml', '.yml', '.csv', '.xml', '.html', '.js', '.ts', '.py', '.log', '.sql', '']
+          if (!textExts.includes(ext) || type === 'file') continue
+          const buf = await ghGetFile(p, sctx)
+          if (!buf) continue
+          const content = buf.toString('utf-8')
+          if (content.toLowerCase().includes(qLower)) {
+            results.push({ path: rel, type: 'file', match: 'content' })
+          }
+        } catch { /* skip file */ }
+      }
+    } else {
+      await searchDir(boxPath, '')
+    }
 
     await recordAnalytics(box!.id, slug, 'SEARCH', 200, req, `q=${q}`)
     return NextResponse.json({ query: q, results, total: results.length }, { headers: rlHeaders })

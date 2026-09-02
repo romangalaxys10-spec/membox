@@ -1,6 +1,10 @@
 import { promises as fs } from 'fs'
 import path from 'path'
-import { githubStorageEnabled, ghGetFile, ghPutFile, ghDeleteFile, ghListDir, ghWalkFiles } from './github-store'
+import { githubStorageEnabled, ghGetFile, ghPutFile, ghDeleteFile, ghListDir, ghWalkFiles, type GhCtx } from './github-store'
+
+// When ctx is provided, operate in the user's own paired repo; otherwise the
+// app-level repo (env vars) is used.
+export type StorageCtx = GhCtx
 
 const BASE_PATH = process.env.STORAGE_PATH || '/home/z/my-project/data/smailspace'
 
@@ -39,12 +43,13 @@ export async function ensureBoxDir(slug: string): Promise<void> {
 
 export async function listBoxFiles(
   slug: string,
-  dirPath = ''
+  dirPath = '',
+  ctx?: StorageCtx | null
 ): Promise<{ name: string; type: 'file' | 'directory'; size?: number; modified?: string }[]> {
-  if (githubStorageEnabled) {
+  if (ctx || githubStorageEnabled) {
     try {
       const prefix = dirPath ? remoteKey(slug, getRelPath(slug, dirPath)) : `boxes/${slug}`
-      const entries = await ghListDir(prefix)
+      const entries = await ghListDir(prefix, ctx)
       return entries.sort((a, b) => {
         if (a.type !== b.type) return a.type === 'directory' ? -1 : 1
         return a.name.localeCompare(b.name)
@@ -80,16 +85,16 @@ export async function listBoxFiles(
   }
 }
 
-export async function readFileContent(slug: string, filePath: string): Promise<string | null> {
+export async function readFileContent(slug: string, filePath: string, ctx?: StorageCtx | null): Promise<string | null> {
   const target = getFilePath(slug, filePath)
   try {
     return await fs.readFile(target, 'utf-8')
   } catch {
     // fall through to remote
   }
-  if (githubStorageEnabled) {
+  if (ctx || githubStorageEnabled) {
     try {
-      const buf = await ghGetFile(remoteKey(slug, getRelPath(slug, filePath)))
+      const buf = await ghGetFile(remoteKey(slug, getRelPath(slug, filePath)), ctx)
       if (buf) return buf.toString('utf-8')
     } catch {
       /* remote miss */
@@ -101,21 +106,23 @@ export async function readFileContent(slug: string, filePath: string): Promise<s
 export async function writeFileContent(
   slug: string,
   filePath: string,
-  content: string
+  content: string,
+  ctx?: StorageCtx | null
 ): Promise<void> {
   const target = getFilePath(slug, filePath)
   await fs.mkdir(path.dirname(target), { recursive: true })
   await fs.writeFile(target, content, 'utf-8')
-  if (githubStorageEnabled) {
+  if (ctx || githubStorageEnabled) {
     await ghPutFile(
       remoteKey(slug, getRelPath(slug, filePath)),
       Buffer.from(content, 'utf-8'),
-      `membox(${slug}): write ${getRelPath(slug, filePath)}`
+      `membox(${slug}): write ${getRelPath(slug, filePath)}`,
+      ctx
     )
   }
 }
 
-export async function deleteFileOrDir(slug: string, filePath: string): Promise<boolean> {
+export async function deleteFileOrDir(slug: string, filePath: string, ctx?: StorageCtx | null): Promise<boolean> {
   const target = getFilePath(slug, filePath)
   let removed = false
   try {
@@ -124,18 +131,18 @@ export async function deleteFileOrDir(slug: string, filePath: string): Promise<b
   } catch {
     removed = false
   }
-  if (githubStorageEnabled) {
+  if (ctx || githubStorageEnabled) {
     // Best effort: delete the subtree in the repo
     const prefix = remoteKey(slug, getRelPath(slug, filePath))
     const files: string[] = []
     try {
-      await ghWalkFiles(prefix, (p) => { files.push(p) })
+      await ghWalkFiles(prefix, (p) => { files.push(p) }, ctx)
     } catch { /* not found or list failure */ }
     if (files.length === 0) {
-      try { await ghDeleteFile(prefix, `membox(${slug}): delete ${getRelPath(slug, filePath)}`) } catch { /* ignore */ }
+      try { await ghDeleteFile(prefix, `membox(${slug}): delete ${getRelPath(slug, filePath)}`, ctx) } catch { /* ignore */ }
     } else {
       for (const p of files) {
-        try { await ghDeleteFile(p, `membox(${slug}): delete file`) } catch { /* ignore */ }
+        try { await ghDeleteFile(p, `membox(${slug}): delete file`, ctx) } catch { /* ignore */ }
       }
     }
     removed = true
@@ -143,11 +150,11 @@ export async function deleteFileOrDir(slug: string, filePath: string): Promise<b
   return removed
 }
 
-export async function getBoxSize(slug: string): Promise<number> {
-  if (githubStorageEnabled) {
+export async function getBoxSize(slug: string, ctx?: StorageCtx | null): Promise<number> {
+  if (ctx || githubStorageEnabled) {
     let totalSize = 0
     try {
-      await ghWalkFiles(`boxes/${slug}`, (_p, size) => { totalSize += size })
+      await ghWalkFiles(`boxes/${slug}`, (_p, size) => { totalSize += size }, ctx)
     } catch { /* ignore */ }
     return totalSize
   }
@@ -176,30 +183,32 @@ export async function getBoxSize(slug: string): Promise<number> {
 export async function writeFileBinary(
   slug: string,
   filePath: string,
-  buffer: Buffer
+  buffer: Buffer,
+  ctx?: StorageCtx | null
 ): Promise<void> {
   const target = getFilePath(slug, filePath)
   await fs.mkdir(path.dirname(target), { recursive: true })
   await fs.writeFile(target, buffer)
-  if (githubStorageEnabled) {
+  if (ctx || githubStorageEnabled) {
     await ghPutFile(
       remoteKey(slug, getRelPath(slug, filePath)),
       buffer,
-      `membox(${slug}): upload ${getRelPath(slug, filePath)}`
+      `membox(${slug}): upload ${getRelPath(slug, filePath)}`,
+      ctx
     )
   }
 }
 
-export async function readFileBinary(slug: string, filePath: string): Promise<Buffer | null> {
+export async function readFileBinary(slug: string, filePath: string, ctx?: StorageCtx | null): Promise<Buffer | null> {
   const target = getFilePath(slug, filePath)
   try {
     return await fs.readFile(target)
   } catch {
     // fall through to remote
   }
-  if (githubStorageEnabled) {
+  if (ctx || githubStorageEnabled) {
     try {
-      return await ghGetFile(remoteKey(slug, getRelPath(slug, filePath)))
+      return await ghGetFile(remoteKey(slug, getRelPath(slug, filePath)), ctx)
     } catch {
       /* remote miss */
     }
@@ -207,13 +216,13 @@ export async function readFileBinary(slug: string, filePath: string): Promise<Bu
   return null
 }
 
-export async function deleteBoxDir(slug: string): Promise<void> {
+export async function deleteBoxDir(slug: string, ctx?: StorageCtx | null): Promise<void> {
   const boxPath = getBoxPath(slug)
   await fs.rm(boxPath, { recursive: true, force: true })
-  if (githubStorageEnabled) {
+  if (ctx || githubStorageEnabled) {
     const files: string[] = []
     try {
-      await ghWalkFiles(`boxes/${slug}`, (p) => { files.push(p) })
+      await ghWalkFiles(`boxes/${slug}`, (p) => { files.push(p) }, ctx)
     } catch { /* ignore */ }
     for (const p of files) {
       try { await ghDeleteFile(p, `membox(${slug}): delete file`) } catch { /* ignore */ }

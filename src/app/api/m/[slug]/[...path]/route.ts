@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { readFileContent, writeFileContent, writeFileBinary, deleteFileOrDir, listBoxFiles, ensureBoxDir } from '@/lib/storage'
+import { storageCtxForBox } from '@/lib/user-storage'
+import type { StorageCtx } from '@/lib/storage'
 import { rateLimitByKey, recordAnalytics, emitWebhook } from '@/lib/auth'
 import { setTtl, removeTtl, removeTtlPrefix } from '@/lib/ttl'
 
@@ -36,18 +38,19 @@ export async function GET(
 
     const { error, box } = await authenticate(req, slug)
     if (error) return error
+    const sctx: StorageCtx | null = await storageCtxForBox(slug)
 
     const filePath = pathSegments.join('/')
 
     if (!filePath) {
-      const files = await listBoxFiles(slug)
+      const files = await listBoxFiles(slug, '', sctx)
       await recordAnalytics(box!.id, slug, 'LIST', 200, req)
       return NextResponse.json({ slug: box!.slug, name: box!.name, files }, { headers: rlHeaders })
     }
 
-    const content = await readFileContent(slug, filePath)
+    const content = await readFileContent(slug, filePath, sctx)
     if (content === null) {
-      const files = await listBoxFiles(slug, filePath)
+      const files = await listBoxFiles(slug, filePath, sctx)
       if (files.length > 0 || filePath.includes('/')) {
         await recordAnalytics(box!.id, slug, 'LIST_DIR', 200, req, filePath)
         return NextResponse.json({ path: filePath, files }, { headers: rlHeaders })
@@ -88,6 +91,7 @@ export async function PUT(
 
     const { error, box } = await authenticate(req, slug)
     if (error) return error
+    const sctx: StorageCtx | null = await storageCtxForBox(slug)
 
     const filePath = pathSegments.join('/')
     if (!filePath) {
@@ -112,7 +116,7 @@ export async function PUT(
       content = await req.text()
     }
 
-    await writeFileContent(slug, filePath, content)
+    await writeFileContent(slug, filePath, content, sctx)
 
     // Handle TTL via query param
     const ttlParam = req.nextUrl.searchParams.get('ttl')
@@ -145,6 +149,7 @@ export async function POST(
 
     const { error, box } = await authenticate(req, slug)
     if (error) return error
+    const sctx: StorageCtx | null = await storageCtxForBox(slug)
 
     const filePath = pathSegments.join('/')
     if (!filePath) {
@@ -204,10 +209,10 @@ export async function POST(
       newContent = await req.text()
     }
 
-    const existing = await readFileContent(slug, filePath)
+    const existing = await readFileContent(slug, filePath, sctx)
     const content = existing ? existing + '\n' + newContent : newContent
 
-    await writeFileContent(slug, filePath, content)
+    await writeFileContent(slug, filePath, content, sctx)
     await recordAnalytics(box!.id, slug, 'APPEND', 200, req, filePath)
     await emitWebhook(box!.id, 'write', slug, filePath)
     return NextResponse.json({ success: true, path: filePath, message: 'Memory appended' }, { headers: rlHeaders })
@@ -229,13 +234,14 @@ export async function DELETE(
 
     const { error, box } = await authenticate(req, slug)
     if (error) return error
+    const sctx: StorageCtx | null = await storageCtxForBox(slug)
 
     const filePath = pathSegments.join('/')
     if (!filePath) {
       return NextResponse.json({ error: 'Path is required' }, { status: 400 })
     }
 
-    const deleted = await deleteFileOrDir(slug, filePath)
+    const deleted = await deleteFileOrDir(slug, filePath, sctx)
     if (!deleted) {
       await recordAnalytics(box!.id, slug, 'DELETE', 404, req, filePath)
       return NextResponse.json({ error: 'Not found' }, { status: 404 })

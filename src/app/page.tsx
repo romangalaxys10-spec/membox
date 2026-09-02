@@ -1144,6 +1144,97 @@ curl https://membox.space-z.ai/api/m/YOUR-SLUG/user-preference \
     )
   }
 
+/* ── GitHub Brain: BYO repo pairing ──────────── */
+function GithubPairCard({ username }: { username: string }) {
+  const [repo, setRepo] = useState('')
+  const [token, setToken] = useState('')
+  const [pairedRepo, setPairedRepo] = useState<string | null>(null)
+  const [status, setStatus] = useState<'idle' | 'working' | 'error'>('idle')
+  const [msg, setMsg] = useState('')
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!username) return
+    fetch(`/api/auth/github?username=${encodeURIComponent(username)}`)
+      .then(r => r.json())
+      .then(d => setPairedRepo(d.repo || null))
+      .catch(() => {})
+  }, [username])
+
+  async function pair() {
+    setStatus('working'); setMsg('')
+    try {
+      const res = await fetch('/api/auth/github', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, repo: repo.trim(), token: token.trim() }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setStatus('error'); setMsg(d.error || 'Pairing failed'); return }
+      setPairedRepo(d.repo); setToken(''); setStatus('idle'); setOpen(false)
+    } catch {
+      setStatus('error'); setMsg('Network error')
+    }
+  }
+
+  async function unpair() {
+    setStatus('working')
+    await fetch('/api/auth/github', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) })
+    setPairedRepo(null); setStatus('idle')
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 mb-8 fade-in">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <span aria-hidden>🧠</span> GitHub Brain
+            <span className="text-xs font-normal px-2 py-0.5 rounded-md bg-white/[0.06] text-zinc-400">optional</span>
+          </h3>
+          <p className="text-sm text-zinc-400 mt-1">
+            {pairedRepo
+              ? <>Your memories are stored in your own private repo <span className="text-emerald-400 font-mono">{pairedRepo}</span>.</>
+              : 'Pair your own private GitHub repo — your boxes then store memories there instead of MemBox storage.'}
+          </p>
+        </div>
+        {pairedRepo ? (
+          <button onClick={unpair} disabled={status === 'working'} className="px-4 py-2 rounded-lg border border-white/10 text-sm text-zinc-300 hover:border-red-500/40 hover:text-red-300 transition-colors disabled:opacity-50">
+            Unpair
+          </button>
+        ) : (
+          <button onClick={() => setOpen(o => !o)} className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500/20 to-teal-500/10 border border-emerald-500/30 text-emerald-300 text-sm font-medium hover:from-emerald-500/30 transition-all">
+            {open ? 'Close' : 'Pair your repo'}
+          </button>
+        )}
+      </div>
+
+      {open && !pairedRepo && (
+        <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-4 text-sm text-zinc-300">
+          <ol className="list-decimal list-inside space-y-2 text-zinc-400">
+            <li>Create a <span className="text-zinc-200">private</span> GitHub repo (any name, e.g. <code className="text-emerald-300">my-membox-brain</code>).</li>
+            <li>
+              Go to <span className="text-zinc-200">GitHub → Settings → Developer settings → Fine-grained tokens</span> → Generate new token:
+              <div className="ml-6 mt-1 text-xs text-zinc-500">Repository access: <span className="text-zinc-300">Only select repositories</span> → pick your repo. Permissions: <span className="text-zinc-300">Contents → Read and write</span>. Nothing else needed.</div>
+            </li>
+            <li>Paste the repo (<code className="text-emerald-300">owner/name</code>) and the token below. MemBox validates it and stores the token encrypted.</li>
+          </ol>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <input value={repo} onChange={e => setRepo(e.target.value)} placeholder="owner/my-membox-brain"
+              className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 font-mono text-sm focus:outline-none focus:border-emerald-500/50" />
+            <input value={token} onChange={e => setToken(e.target.value)} placeholder="github_pat_..." type="password"
+              className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 font-mono text-sm focus:outline-none focus:border-emerald-500/50" />
+          </div>
+          {msg && <p className="text-red-400 text-xs">{msg}</p>}
+          <button onClick={pair} disabled={status === 'working' || !repo || !token}
+            className="px-5 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-medium hover:bg-emerald-500/30 transition-all disabled:opacity-40">
+            {status === 'working' ? 'Validating & pairing…' : 'Pair repo'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
   /* ════════════════════════════════════════════════
      VIEW: DASHBOARD
      ════════════════════════════════════════════════ */
@@ -1156,6 +1247,7 @@ curl https://membox.space-z.ai/api/m/YOUR-SLUG/user-preference \
       <main className="flex-1">
         {!activeBox ? (
           <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+            <GithubPairCard username={userId} />
             {/* Create */}
             <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 mb-8 fade-in">
               <h2 className="text-base font-semibold flex items-center gap-2 mb-1">

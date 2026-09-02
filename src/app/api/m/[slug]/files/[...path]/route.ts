@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { readFileBinary } from '@/lib/storage'
+import { storageCtxForBox } from '@/lib/user-storage'
 import path from 'path'
 
 const MIME_TYPES: Record<string, string> = {
@@ -78,6 +79,7 @@ export async function GET(
   try {
     const { slug, path: pathSegments } = await params
     const { error } = await authenticate(req, slug)
+    const sctx = await storageCtxForBox(slug)
     if (error) return error
 
     const filePath = pathSegments.join('/')
@@ -85,7 +87,7 @@ export async function GET(
       return NextResponse.json({ error: 'File path is required' }, { status: 400 })
     }
 
-    const buffer = await readFileBinary(slug, filePath)
+    const buffer = await readFileBinary(slug, filePath, sctx)
     if (!buffer) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 })
     }
