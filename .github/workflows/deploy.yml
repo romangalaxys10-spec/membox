@@ -13,8 +13,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install Vercel CLI
-        run: npm i -g vercel@latest
+      - name: Install tooling
+        run: |
+          npm i -g vercel@latest
+          npm i -g bun
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
         env:
