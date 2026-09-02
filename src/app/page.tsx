@@ -382,9 +382,6 @@ function CreditFooter({ lang }: { lang: LangCode }) {
                   {t(lang, 'footer.support')}
                 </span>
               </a>
-              <a href="https://codetrendy.com/?utm_source=membox&utm_medium=badge" target="_blank" rel="nofollow noopener noreferrer" className="inline-flex items-center">
-                <img src="https://codetrendy.com/api/badge?style=classic" alt="Profiled on CodeTrendy" height="54" className="rounded" />
-              </a>
               <a href="https://rommark.dev" target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300 transition-colors inline-flex items-center gap-1">
                 Portfolio: rommark.dev <ExternalLink className="h-2.5 w-2.5" />
               </a>
