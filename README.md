@@ -74,7 +74,7 @@ That's the promise of GLM 5 Turbo — and MemBox is living proof.
 - **File Upload (RAG-ready)** — PDF, Word, Excel, PowerPoint, images, audio, video, code, Parquet, ONNX — 100+ file types, up to 500 MB each.
 - **Token Auth** — Each box gets a unique secret token. Only your tools can access it.
 - **Path-Based Storage** — Organize in folders: `project/context`, `docs/reports`, `agent/state`.
-- **Unlimited Storage** — No storage limits. No credit card. Completely free.
+- **1 MB Free Storage** — Every free MemBox includes 1 MB of storage. Need more? [Self-host](#-self-host) on your own infrastructure (free, MIT) or contact **rommark@gmx.com** for hosting provider recommendations.
 - **Login System** — Username + login token for account recovery. Save it offline once.
 - **Beautiful UI** — Dark theme, frosted glass, Apple/Dell-inspired design with drag-and-drop uploads.
 - **Code Snippets** — One-click copy for curl, Python, Node.js, and MCP integration.
@@ -376,7 +376,7 @@ If you're a developer who wants to build at this speed, [try GLM 5 Turbo](https:
 It's storage that lets an AI agent keep context — decisions, preferences, project state, documents — between sessions, instead of starting from zero every time. MemBox provides exactly this as a hosted REST API.
 
 **Is MemBox really free?**
-Yes. Unlimited boxes, unlimited storage, no credit card. Self-hosting is also free under the MIT license.
+Every free MemBox includes 1 MB of storage. Need more? Either self-host MemBox on your own infrastructure (free under the MIT license) or contact **rommark@gmx.com** for hosting provider recommendations.
 
 **How is MemBox different from a vector database?**
 Vector DBs store embeddings for semantic search. MemBox stores *agent state*: exact memories, files, and documents addressable by path — like a tiny private cloud drive your agent can read and write. Use both together: MemBox for state, a vector DB for fuzzy retrieval.
@@ -402,7 +402,7 @@ Yes — it's a single Next.js app with SQLite via Prisma. Clone, `npm install`, 
 
 | | **MemBox** | Mem0 | Zep | Redis | Plain vector DB |
 |---|---|---|---|---|---|
-| Price | **Free, unlimited** | Paid tiers | Paid tiers | Self-host cost | Self-host cost |
+| Price | **Free (1 MB included)** | Paid tiers | Paid tiers | Self-host cost | Self-host cost |
 | Setup | **None — get a URL + token** | SDK + backend | SDK + backend | Run a server | Run a server + embedder |
 | Stores files (PDF, video…) | ✅ 100+ types | Limited | Limited | ❌ | ❌ |
 | Exact key/value agent state | ✅ | ❌ | ❌ | ✅ | ❌ |
