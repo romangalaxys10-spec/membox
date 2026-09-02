@@ -76,3 +76,6 @@ tests/
 .bun.lock
 Caddyfile
 .env*
+
+# local security scanner cache
+.mimosa/
