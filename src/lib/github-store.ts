@@ -70,6 +70,7 @@ export function ctxFor(repo: string, token: string, branch = 'main'): GhCtx | nu
 }
 
 function assertSafePath(p: string): void {
+  if (p === '') return // repo root
   if (!PATH_PATTERN.test(p) || p.split('/').some(seg => seg === '.' || seg === '..')) {
     throw new Error('Invalid storage path')
   }

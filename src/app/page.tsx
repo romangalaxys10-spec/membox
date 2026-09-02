@@ -1144,6 +1144,85 @@ curl https://membox.space-z.ai/api/m/YOUR-SLUG/user-preference \
     )
   }
 
+/* ── GitHub Brain: data explorer ─────────────── */
+interface ExploreEntry { name: string; type: 'file' | 'directory'; size: number }
+function GithubExplorer({ username, repo }: { username: string; repo: string }) {
+  const [path, setPath] = useState('')
+  const [entries, setEntries] = useState<ExploreEntry[]>([])
+  const [file, setFile] = useState<{ path: string; content?: string; tooLarge?: boolean; size?: number } | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState('')
+
+  const load = useCallback(async (p: string) => {
+    setLoading(true); setErr(''); setFile(null)
+    try {
+      const res = await fetch(`/api/auth/github/explore?username=${encodeURIComponent(username)}&path=${encodeURIComponent(p)}`)
+      const d = await res.json()
+      if (!res.ok) { setErr(d.error || 'Failed to load'); setEntries([]); return }
+      if (d.type === 'dir') { setEntries(d.entries || []); setPath(p) }
+      else { setFile(d); }
+    } catch { setErr('Network error') }
+    setLoading(false)
+  }, [username])
+
+  useEffect(() => { if (repo) load('') }, [repo, load])
+  if (!repo) return null
+
+  const crumbs = path ? path.split('/') : []
+  const pretty = (() => {
+    if (!file?.content) return null
+    try { return JSON.stringify(JSON.parse(file.content), null, 2) } catch { return null }
+  })()
+
+  return (
+    <div className="mt-5 border-t border-white/[0.06] pt-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <div className="text-xs font-mono text-zinc-400 flex items-center gap-1 flex-wrap">
+          <button onClick={() => load('')} className="hover:text-emerald-300">{repo}</button>
+          {crumbs.map((c, i) => (
+            <span key={i}>
+              <span className="text-zinc-600">/</span>
+              <button onClick={() => load(crumbs.slice(0, i + 1).join('/'))} className="hover:text-emerald-300">{c}</button>
+            </span>
+          ))}
+        </div>
+        <span className="text-[10px] uppercase tracking-wider text-zinc-600">data explorer</span>
+      </div>
+      {loading && <p className="text-xs text-zinc-500">Loading…</p>}
+      {err && <p className="text-xs text-red-400">{err}</p>}
+      {!loading && !file && (
+        <div className="grid sm:grid-cols-2 gap-1">
+          {entries.length === 0 && !loading && <p className="text-xs text-zinc-600">Empty</p>}
+          {entries.map(e => (
+            <button key={e.name} onClick={() => load(path ? `${path}/${e.name}` : e.name)}
+              className="flex items-center gap-2 text-left px-3 py-1.5 rounded-lg hover:bg-white/[0.04] text-sm group">
+              <span aria-hidden>{e.type === 'directory' ? '📁' : '📄'}</span>
+              <span className="text-zinc-300 group-hover:text-white truncate">{e.name}</span>
+              {e.type === 'file' && e.size != null && (
+                <span className="ml-auto text-[10px] text-zinc-600">{e.size > 1024 ? `${(e.size / 1024).toFixed(1)} KB` : `${e.size} B`}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {file && (
+        <div>
+          <button onClick={() => load(file.path.split('/').slice(0, -1).join('/'))} className="text-xs text-emerald-400 hover:text-emerald-300 mb-2">
+            ← back to folder
+          </button>
+          {file.tooLarge ? (
+            <p className="text-xs text-zinc-500">File is too large to preview ({((file.size || 0) / 1024).toFixed(0)} KB). Download it via the box API instead.</p>
+          ) : (
+            <pre className="text-[11px] leading-relaxed font-mono bg-black/40 border border-white/[0.06] rounded-xl p-4 overflow-auto max-h-96 text-zinc-300 whitespace-pre-wrap break-all">
+              {pretty ?? file.content}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── GitHub Brain: BYO repo pairing ──────────── */
 function GithubPairCard({ username }: { username: string }) {
   const [repo, setRepo] = useState('')
@@ -1207,6 +1286,7 @@ function GithubPairCard({ username }: { username: string }) {
           </button>
         )}
       </div>
+      {pairedRepo && <GithubExplorer username={username} repo={pairedRepo} />}
 
       {open && !pairedRepo && (
         <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-4 text-sm text-zinc-300">
