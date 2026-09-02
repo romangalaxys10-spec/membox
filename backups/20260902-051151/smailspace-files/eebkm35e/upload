@@ -1,0 +1,95 @@
+--------------------------a1e3cFlsOEH30AdMT0Rt1Q
+Content-Disposition: form-data; name="files"; filename="test-upload.txt"
+Content-Type: text/plain
+
+hello from upload test
+
+--------------------------a1e3cFlsOEH30AdMT0Rt1Q
+Content-Disposition: form-data; name="folder"
+
+test-dir
+--------------------------a1e3cFlsOEH30AdMT0Rt1Q--
+
+--------------------------piJqadYh6O18Dce7rXgOuo
+Content-Disposition: form-data; name="files"; filename="test-upload.txt"
+Content-Type: text/plain
+
+hello from upload test
+
+--------------------------piJqadYh6O18Dce7rXgOuo
+Content-Disposition: form-data; name="folder"
+
+test-dir
+--------------------------piJqadYh6O18Dce7rXgOuo--
+
+--------------------------A1uY3Z1bAMTwkr02HkQmrz
+Content-Disposition: form-data; name="files"; filename="test-upload.txt"
+Content-Type: text/plain
+
+hello from upload test
+
+--------------------------A1uY3Z1bAMTwkr02HkQmrz
+Content-Disposition: form-data; name="folder"
+
+test-dir
+--------------------------A1uY3Z1bAMTwkr02HkQmrz--
+
+--------------------------g1GxSWy17zSJEMFU5R73d8
+Content-Disposition: form-data; name="files"; filename="test-upload.txt"
+Content-Type: text/plain
+
+hello world
+
+--------------------------g1GxSWy17zSJEMFU5R73d8
+Content-Disposition: form-data; name="folder"
+
+my-docs
+--------------------------g1GxSWy17zSJEMFU5R73d8--
+
+--------------------------9UtFGjfGluCWLcKNulrH4t
+Content-Disposition: form-data; name="files"; filename="test-upload2.txt"
+Content-Type: text/plain
+
+hello world test
+
+--------------------------9UtFGjfGluCWLcKNulrH4t
+Content-Disposition: form-data; name="folder"
+
+my-docs
+--------------------------9UtFGjfGluCWLcKNulrH4t--
+
+--------------------------vK07P2iKLXQW1JsNvoB3AE
+Content-Disposition: form-data; name="files"; filename="test-upload2.txt"
+Content-Type: text/plain
+
+hello world test
+
+--------------------------vK07P2iKLXQW1JsNvoB3AE
+Content-Disposition: form-data; name="folder"
+
+my-docs
+--------------------------vK07P2iKLXQW1JsNvoB3AE--
+
+--------------------------LV5xMIfxHNa95hmz9l6QYL
+Content-Disposition: form-data; name="files"; filename="test-upload2.txt"
+Content-Type: text/plain
+
+hello world test
+
+--------------------------LV5xMIfxHNa95hmz9l6QYL
+Content-Disposition: form-data; name="folder"
+
+my-docs
+--------------------------LV5xMIfxHNa95hmz9l6QYL--
+
+--------------------------8tpeORaEdNX7xlBnd1o02B
+Content-Disposition: form-data; name="files"; filename="test-upload2.txt"
+Content-Type: text/plain
+
+hello world test
+
+--------------------------8tpeORaEdNX7xlBnd1o02B
+Content-Disposition: form-data; name="folder"
+
+my-docs
+--------------------------8tpeORaEdNX7xlBnd1o02B--
