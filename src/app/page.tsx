@@ -40,8 +40,8 @@ function useReveal() {
     const el = ref.current
     if (!el) return
     const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { el.classList.add('visible'); obs.unobserve(el) } },
-      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+      (entries) => { entries.forEach(entry => { if (entry.isIntersecting) { entry.target.classList.add('visible'); obs.unobserve(entry.target) } }) },
+      { threshold: 0.1, rootMargin: '0px 0px -30px 0px' }
     )
     el.querySelectorAll('.reveal').forEach(child => obs.observe(child))
     if (el.classList.contains('reveal')) obs.observe(el)
@@ -925,6 +925,71 @@ TOKEN = "${t}"
                   <span key={ft} className="px-2.5 py-1 rounded-md bg-white/[0.03] border border-white/[0.06] text-[11px] text-zinc-500 pill-lift cursor-default">{ft}</span>
                 ))}
               </div>
+            </div>
+          </section>
+
+          {/* How it Works */}
+          <section className="max-w-4xl mx-auto px-4 sm:px-6 pb-20 reveal" ref={typesRef}>
+            <h2 className="text-center text-xs text-zinc-500 uppercase tracking-[0.2em] mb-10 font-medium">{t(lang, 'how.title')}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {['s1', 's2', 's3'].map((s, i) => (
+                <div key={s} className={"relative reveal " + ("reveal-delay-" + (i + 1))}>
+                  <div className="text-5xl font-black text-white/[0.03] absolute -top-3 -left-1 select-none" style={{ fontFamily: 'system-ui' }}>{t(lang, `how.${s}num`)}</div>
+                  <div className="relative pt-8 pl-1">
+                    <h3 className="text-sm font-semibold text-zinc-200 mb-2">{t(lang, `how.${s}title`)}</h3>
+                    <p className="text-[13px] text-zinc-500 leading-relaxed">{t(lang, `how.${s}desc`)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Stats */}
+          <section className="max-w-5xl mx-auto px-4 sm:px-6 pb-20" ref={typesRef}>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { val: t(lang, 'stat.free'), desc: t(lang, 'stat.freeDesc'), accent: true },
+                { val: t(lang, 'stat.files'), desc: t(lang, 'stat.filesDesc') },
+                { val: t(lang, 'stat.unlimited'), desc: t(lang, 'stat.unlimitedDesc') },
+                { val: t(lang, 'stat.setup'), desc: t(lang, 'stat.setupDesc') },
+              ].map((s, i) => (
+                <div key={i} className={"rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 text-center card-hover reveal " + (i < 5 ? "reveal-delay-" + (i + 1) : "")}>
+                  <div className={"text-lg font-bold mb-1 " + (s.accent ? 'glow-text' : 'text-zinc-200')}>{s.val}</div>
+                  <p className="text-[11px] text-zinc-500 leading-relaxed">{s.desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Agent Compatibility */}
+          <section className="max-w-4xl mx-auto px-4 sm:px-6 pb-20 text-center reveal">
+            <h2 className="text-base sm:text-lg font-bold tracking-tight mb-2">{t(lang, 'agents.title')}</h2>
+            <p className="text-sm text-zinc-500 max-w-lg mx-auto mb-8">{t(lang, 'agents.desc')}</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              {['Claude Code', 'Cursor', 'Cline', 'GPT Agents', 'LangChain', 'CrewAI', 'AutoGen', 'MCP', 'Codex CLI', 'Any HTTP Client'].map((agent) => (
+                <span key={agent} className="px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] text-xs text-zinc-400 pill-lift cursor-default font-medium">{agent}</span>
+              ))}
+            </div>
+          </section>
+
+          {/* Code Preview */}
+          <section className="max-w-2xl mx-auto px-4 sm:px-6 pb-20 text-center reveal">
+            <h2 className="text-base sm:text-lg font-bold tracking-tight mb-2">{t(lang, 'code.title')}</h2>
+            <p className="text-sm text-zinc-500 mb-6">{t(lang, 'code.desc')}</p>
+            <div className="text-left">
+              <CodeBlock
+                lang={lang}
+                language="bash"
+                code={`# Store a memory
+curl -X PUT https://membox.space-z.ai/api/m/YOUR-SLUG/user-preference \
+  -H "Authorization: Bearer YOUR-TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "User prefers TypeScript and dark mode"}'
+
+# Read it back
+curl https://membox.space-z.ai/api/m/YOUR-SLUG/user-preference \
+  -H "Authorization: Bearer YOUR-TOKEN"`}
+              />
             </div>
           </section>
 
