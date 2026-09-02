@@ -1211,12 +1211,22 @@ function GithubPairCard({ username }: { username: string }) {
       {open && !pairedRepo && (
         <div className="mt-5 border-t border-white/[0.06] pt-5 space-y-4 text-sm text-zinc-300">
           <ol className="list-decimal list-inside space-y-2 text-zinc-400">
-            <li>Create a <span className="text-zinc-200">private</span> GitHub repo (any name, e.g. <code className="text-emerald-300">my-membox-brain</code>).</li>
             <li>
-              Go to <span className="text-zinc-200">GitHub → Settings → Developer settings → Fine-grained tokens</span> → Generate new token:
-              <div className="ml-6 mt-1 text-xs text-zinc-500">Repository access: <span className="text-zinc-300">Only select repositories</span> → pick your repo. Permissions: <span className="text-zinc-300">Contents → Read and write</span>. Nothing else needed.</div>
+              <a href="https://github.com/new" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline decoration-emerald-500/40 hover:decoration-emerald-400">Create a new private repo on GitHub</a>
+              <span className="text-zinc-500"> → </span>
+              <span className="text-zinc-200">pick "Private"</span>, give it any name (e.g. <code className="text-emerald-300">my-membox-brain</code>), click <span className="text-zinc-200">"Create repository"</span>. Done — nothing else on this page.
             </li>
-            <li>Paste the repo (<code className="text-emerald-300">owner/name</code>) and the token below. MemBox validates it and stores the token encrypted.</li>
+            <li>
+              <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline decoration-emerald-500/40 hover:decoration-emerald-400">Create the access token on GitHub</a>
+              <span className="text-zinc-500"> → </span>fill in exactly 3 things:
+              <div className="ml-6 mt-1 text-xs text-zinc-500 space-y-1">
+                <div>1. <span className="text-zinc-300">Token name</span>: anything, e.g. <code className="text-emerald-300">membox</code></div>
+                <div>2. <span className="text-zinc-300">Repository access</span>: choose <span className="text-zinc-300">"Only select repositories"</span> → pick your <code className="text-emerald-300">my-membox-brain</code> repo</div>
+                <div>3. <span className="text-zinc-300">Permissions → Repository permissions → Contents</span>: set to <span className="text-zinc-300">"Read and write"</span>. Leave everything else alone.</div>
+                <div>Then click <span className="text-zinc-300">"Generate token"</span> at the bottom and <span className="text-zinc-300">copy the token</span> it shows (starts with <code>github_pat_</code>).</div>
+              </div>
+            </li>
+            <li>Come back here: paste the repo name (<code className="text-emerald-300">yourname/my-membox-brain</code>) and the token below, and hit <span className="text-zinc-200">Pair repo</span>. MemBox checks it works and saves the token encrypted — GitHub never sees your memories, and MemBox never sees your token in plain text.</li>
           </ol>
           <div className="grid sm:grid-cols-2 gap-3">
             <input value={repo} onChange={e => setRepo(e.target.value)} placeholder="owner/my-membox-brain"

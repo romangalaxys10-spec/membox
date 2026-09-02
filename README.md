@@ -356,8 +356,8 @@ Users can go one step further and **pair their own private GitHub repo** — the
 
 In the dashboard, the **GitHub Brain** card walks the user through:
 
-1. Create a **private** repo (any name).
-2. Create a **fine-grained personal access token**: *Repository access → Only select repositories → [your repo]*, and *Permissions → Contents → Read and write*. Nothing else.
+1. [Create a new repo](https://github.com/new) → pick **Private**, name it anything (e.g. `my-membox-brain`), click **Create repository**.
+2. [Create a fine-grained personal access token](https://github.com/settings/personal-access-tokens/new): set **Repository access → Only select repositories → [your repo]**, and **Permissions → Repository permissions → Contents → Read and write**. Then click **Generate token** and copy it (starts with `github_pat_`).
 3. Paste `owner/repo` + the token into the card. MemBox validates access against the GitHub API and stores the token **AES-256-GCM encrypted** (`APP_SECRET` env var required on the server). The raw token is never logged or returned.
 
 Once paired, that user's memory writes, reads, uploads, deletes, listings and even search run against their repo. Unpairing from the card (or revoking the token on GitHub) stops all access.
