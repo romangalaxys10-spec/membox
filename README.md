@@ -47,7 +47,7 @@
 
 ### Table of Contents
 
-- [The Story](#the-story) · [Features](#-features) · [Quick Start](#-quick-start) · [API Reference](#-api-reference) · [Use With AI Agents](#-use-with-ai-agents) · [FAQ](#-faq) · [How MemBox Compares](#-how-membox-compares) · [Tech Stack](#-tech-stack) · [Author](#-author) · [License](#-license)
+- [The Story](#the-story) · [Features](#-features) · [Quick Start](#-quick-start) · [API Reference](#-api-reference) · [Use With AI Agents](#-use-with-ai-agents) · [GitHub Brain Storage](#-github-brain-storage-alternative-storage-backend) · [FAQ](#-faq) · [How MemBox Compares](#-how-membox-compares) · [Tech Stack](#-tech-stack) · [Author](#-author) · [License](#-license)
 
 ---
 
@@ -307,6 +307,50 @@ const data = await res.json();
 ...and 100+ more.
 
 ---
+
+## 🧠 GitHub Brain Storage (Alternative Storage Backend)
+
+MemBox ships with a **pluggable storage backend**. By default memories live on the local filesystem + SQLite — great for a VPS, but a problem on ephemeral serverless hosts (Vercel, Netlify) where the disk is wiped between deployments and instance restarts.
+
+The **GitHub Brain Storage** backend solves this by using a **private GitHub repository as the durable storage layer**. MemBox on Vercel becomes a thin front-end; all data lives in your repo:
+
+```
+membox-brain/  (private repo)
+├ boxes/
+│  └ <box-slug>/
+│     └ ...your memory files, folder structure preserved
+└ db/
+   ├ custom.db        # SQLite checkpoint (users, boxes, tokens, shares, TTLs)
+   └ custom.db-wal    # WAL journal sidecar (uploaded with the checkpoint)
+```
+
+**How it works**
+
+- **Memory writes** — every `PUT`/`POST`/upload is committed straight to the repo via the GitHub Contents API, with a descriptive commit message per change (`membox(<slug>): write <path>`). You get full git history: every memory change is diffable and revertible.
+- **Account/box database** — after each user registration or box creation, MemBox checkpoints the SQLite database (plus its WAL journal) into `db/` in the repo. The upload is awaited in-request (serverless freezes background timers) with in-flight dedup.
+- **Cold-start restore** — when a fresh serverless instance starts with an empty disk, it restores the database and reads memory files from the repo before serving its first request. Local files act only as a write-through cache.
+- **Deletes** — propagate to the repo as deletion commits.
+
+**Setup (env vars)**
+
+| Variable | Required | Description |
+|---|---|---|
+| `GITHUB_STORAGE_REPO` | yes (for this backend) | Private repo in `owner/name` form, e.g. `yourname/membox-brain` |
+| `GITHUB_STORAGE_TOKEN` | yes | GitHub token with repo contents read/write scope. **Set only as a secret env var — never commit it.** |
+| `GITHUB_STORAGE_BRANCH` | no | Defaults to `main` |
+
+If these are absent, MemBox transparently falls back to local filesystem storage (default self-host behavior).
+
+**Properties & limits**
+
+- ✅ Durable on serverless — survives instance recycling, deploys and restarts
+- ✅ Full version history of every memory (git log / git revert as a free audit trail)
+- ✅ Private by default — the repo is yours; tokens never leave server-side env vars
+- ⚠️ **Not a vector database** — search is substring-based. Semantic/RAG search needs an embedding layer on top (roadmap).
+- ⚠️ GitHub Contents API limits: ~5,000 requests/hour per token; files up to ~25 MB per commit are practical. Rate limit headers are honored per-box.
+- ⚠️ Checkpoints are last-writer-wins: two instances committing a DB checkpoint in the same instant can race (acceptable for personal/light team use).
+
+**SSRF hardening** (`src/lib/github-store.ts`): requests are pinned to `https://api.github.com` via `new URL()` + allowlist checks, the repo slug must match `owner/name`, storage paths reject `..` segments, and redirects are refused.
 
 ## 📍 Architecture
 
