@@ -1,4 +1,7 @@
+import { promises as fs } from 'fs'
+import path from 'path'
 import { PrismaClient } from '@prisma/client'
+import { githubStorageEnabled, ghGetFile, ghPutFile } from './github-store'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -16,9 +19,67 @@ export const db =
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 
-// Serverless environments (e.g. Vercel) get a fresh filesystem per instance,
-// so the SQLite schema is applied lazily on first use instead of at deploy time.
+const REMOTE_DB_PATH = 'db/custom.db'
+
+function localDbPath(): string | null {
+  const url = process.env.DATABASE_URL || ''
+  if (!url.startsWith('file:')) return null
+  return path.resolve(url.slice('file:'.length))
+}
+
+// Checkpoint the SQLite file into the repo so box/token records survive
+// serverless instance recycling. Awaited by mutation routes (serverless freezes
+// background timers after the response) with in-flight dedup. Last-writer-wins.
+const globalForDb = globalThis as unknown as { dbCheckpoint: Promise<void> | null }
+async function uploadCheckpoint(): Promise<void> {
+  try {
+    const local = localDbPath()
+    if (!local) return
+    // Prisma runs SQLite in WAL mode: committed rows may live in the -wal
+    // journal, so upload it (and -shm) alongside the main file. On restore the
+    // journal is written back before any connection opens and SQLite recovers.
+    await ghPutFile(REMOTE_DB_PATH, await fs.readFile(local), 'membox: sqlite checkpoint')
+    for (const suffix of ['-wal', '-shm']) {
+      try {
+        await ghPutFile(REMOTE_DB_PATH + suffix, await fs.readFile(local + suffix), `membox: sqlite checkpoint${suffix}`)
+      } catch { /* journal sidecar absent — fine */ }
+    }
+  } catch {
+    /* checkpoint is best-effort */
+  }
+}
+function scheduleCheckpoint(): Promise<void> {
+  globalForDb.dbCheckpoint ??= uploadCheckpoint().finally(() => { globalForDb.dbCheckpoint = null })
+  return globalForDb.dbCheckpoint
+}
+
+// Serverless environments (e.g. Vercel) get a fresh filesystem per instance.
+// On first use: restore the DB from the repo if this instance has none, apply
+// the schema, and arm checkpoint uploads after mutations.
 async function bootstrapSchema(): Promise<void> {
+  const local = localDbPath()
+  let restored = false
+  if (githubStorageEnabled && local) {
+    try {
+      const exists = await fs.access(local).then(() => true, () => false)
+      const buf = exists ? null : await ghGetFile(REMOTE_DB_PATH)
+      if (buf) {
+        await fs.mkdir(path.dirname(local), { recursive: true })
+        await fs.writeFile(local, buf)
+        // Restore WAL sidecars (if any) BEFORE the first connection opens
+        for (const suffix of ['-wal', '-shm']) {
+          try {
+            const side = await ghGetFile(REMOTE_DB_PATH + suffix)
+            if (side) await fs.writeFile(local + suffix, side)
+          } catch { /* absent — fine */ }
+        }
+        restored = true
+      }
+    } catch {
+      /* restore is best-effort */
+    }
+  }
+
   const ddl = [
     `CREATE TABLE IF NOT EXISTS "User" ("id" TEXT NOT NULL PRIMARY KEY, "username" TEXT NOT NULL UNIQUE, "loginToken" TEXT NOT NULL UNIQUE, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS "MemBox" ("id" TEXT NOT NULL PRIMARY KEY, "slug" TEXT NOT NULL UNIQUE, "name" TEXT NOT NULL, "token" TEXT NOT NULL UNIQUE, "userId" TEXT NOT NULL, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" DATETIME NOT NULL)`,
@@ -32,6 +93,9 @@ async function bootstrapSchema(): Promise<void> {
   for (const statement of ddl) {
     await db.$executeRawUnsafe(statement)
   }
+
+  // Note: no checkpoint upload here — every cold instance re-uploading would
+  // stampede and clobber the latest checkpoint. Only mutation routes upload.
 }
 
 export function ensureSchema(): Promise<void> {
@@ -40,4 +104,10 @@ export function ensureSchema(): Promise<void> {
     throw err
   })
   return globalForPrisma.prismaBootstrap
+}
+
+// Call (and await) after any mutation (user/box creation) to persist the DB.
+export async function persistDb(): Promise<void> {
+  if (!githubStorageEnabled) return
+  await scheduleCheckpoint()
 }

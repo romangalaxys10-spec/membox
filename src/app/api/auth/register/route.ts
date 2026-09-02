@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, ensureSchema } from '@/lib/db'
+import { db, ensureSchema, persistDb } from '@/lib/db'
 import { generateToken } from '@/lib/token'
 
 export async function POST(req: NextRequest) {
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     const user = await db.user.create({
       data: { username: trimmed, loginToken },
     })
+    await persistDb()
 
     return NextResponse.json({
       success: true,

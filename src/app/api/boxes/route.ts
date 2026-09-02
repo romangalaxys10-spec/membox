@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, ensureSchema } from '@/lib/db'
+import { db, ensureSchema, persistDb } from '@/lib/db'
 import { generateToken, generateSlug } from '@/lib/token'
 import { ensureBoxDir, listBoxFiles, getBoxSize } from '@/lib/storage'
 
@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     const box = await db.memBox.create({
       data: { slug, name, token, userId },
     })
+    await persistDb()
 
     await ensureBoxDir(slug)
 
