@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from './db'
+import { db, ensureSchema } from './db'
 import { checkRateLimit } from './rate-limit'
 import { trackEvent } from './analytics'
 import { fireWebhooks } from './webhook'
@@ -22,7 +22,7 @@ export async function authenticate(req: NextRequest, slug: string): Promise<Auth
     return { error: NextResponse.json({ error: 'Missing token. Provide via Authorization: Bearer <token> or X-MemBox-Token header.' }, { status: 401 }), box: null }
   }
 
-  const box = await db.memBox.findUnique({ where: { slug } })
+  const box = await (async () => { await ensureSchema(); return db.memBox.findUnique({ where: { slug } }) })()
   if (!box) {
     return { error: NextResponse.json({ error: 'MemBox not found' }, { status: 404 }), box: null }
   }
@@ -45,7 +45,7 @@ export async function requireWriteAccess(req: NextRequest, slug: string): Promis
     return { error: NextResponse.json({ error: 'Missing token' }, { status: 401 }), box: null }
   }
 
-  const box = await db.memBox.findUnique({ where: { slug } })
+  const box = await (async () => { await ensureSchema(); return db.memBox.findUnique({ where: { slug } }) })()
   if (!box) {
     return { error: NextResponse.json({ error: 'MemBox not found' }, { status: 404 }), box: null }
   }

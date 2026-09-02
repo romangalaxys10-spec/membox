@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import { generateToken, generateSlug } from '@/lib/token'
 import { ensureBoxDir, listBoxFiles, getBoxSize } from '@/lib/storage'
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureSchema()
     const body = await req.json()
     const name = (body.name || '').trim().slice(0, 100)
     const userId = (body.userId || '').trim().slice(0, 100)

@@ -75,3 +75,4 @@ examples/
 tests/
 .bun.lock
 Caddyfile
+.env*

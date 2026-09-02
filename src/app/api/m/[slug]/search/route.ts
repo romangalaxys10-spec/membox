@@ -27,6 +27,7 @@ export async function GET(
   try {
     const results: { path: string; type: 'file' | 'directory'; match: string; size?: number }[] = []
     const boxPath = getBoxPath(slug)
+    const boxRoot = path.resolve(boxPath)
     const qLower = q.toLowerCase()
 
     async function searchDir(dir: string, prefix: string) {
@@ -35,6 +36,9 @@ export async function GET(
         for (const entry of entries) {
           if (results.length >= limit) return
           const fullPath = path.join(dir, entry.name)
+          // Containment guard: never follow paths that resolve outside the box directory
+          if (entry.isSymbolicLink()) continue
+          if (!path.resolve(fullPath).startsWith(boxRoot + path.sep)) return
           const relPath = prefix ? `${prefix}/${entry.name}` : entry.name
 
           // Match file/directory name

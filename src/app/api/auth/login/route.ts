@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import { generateToken } from '@/lib/token'
 
 export async function POST(req: NextRequest) {
@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Username and login token are required' }, { status: 400 })
     }
 
+    await ensureSchema()
     const user = await db.user.findUnique({ where: { username: username.trim() } })
     if (!user) {
       return NextResponse.json({ error: 'Account not found. Check your username or create a new MemBox to register.' }, { status: 404 })

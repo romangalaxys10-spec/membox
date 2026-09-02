@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureSchema } from '@/lib/db'
 import { generateToken } from '@/lib/token'
 
 export async function POST(req: NextRequest) {
@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if user already exists
+    await ensureSchema()
     const existing = await db.user.findUnique({ where: { username: trimmed } })
     if (existing) {
       return NextResponse.json({ error: 'Username already taken. Please log in instead.', errorType: 'exists' }, { status: 409 })
