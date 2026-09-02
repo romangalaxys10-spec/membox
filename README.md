@@ -26,6 +26,10 @@
   <img src="https://img.shields.io/badge/Live Demo-membox.space--z.ai-emerald?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PGxpbmUgeDE9IjIiIHkxPSIxMiIgeDI9IjIyIiB5Mj0iMTIiLz48bGluZSB4MT0iMTIiIHkxPSIyIiB4Mj0iMTIiIHkyPSIyMiIvPjwvc3ZnPg==" alt="Live Demo"/>
 </a>
 
+<a href="https://membox-preview.vercel.app">
+  <img src="https://img.shields.io/badge/Vercel Preview-membox--preview.vercel.app-black?style=for-the-badge&logo=vercel" alt="Vercel Preview"/>
+</a>
+
 <h1>MemBox</h1>
 
 <p>
@@ -87,6 +91,8 @@ That's the promise of GLM 5 Turbo — and MemBox is living proof.
 2. **Save your login token offline** (shown once!)
 3. Create a MemBox
 4. Copy the API endpoint + token into your agent
+
+Also available as a **[Vercel preview](https://membox-preview.vercel.app)** — fully functional, but stored data is ephemeral (serverless SQLite), so don't rely on it for real memories.
 
 ### Self-Host
 
