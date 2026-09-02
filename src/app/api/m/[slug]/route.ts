@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { listBoxFiles } from '@/lib/storage'
+import { rateLimitByKey, recordAnalytics } from '@/lib/auth'
 
 async function authenticate(req: NextRequest, slug: string) {
   const authHeader = req.headers.get('authorization')
@@ -29,11 +30,15 @@ export async function GET(
 ) {
   try {
     const { slug } = await params
+    const { error: rlError, headers: rlHeaders } = rateLimitByKey(slug)
+    if (rlError) return rlError
+
     const { error, box } = await authenticate(req, slug)
     if (error) return error
 
     const files = await listBoxFiles(slug)
-    return NextResponse.json({ slug: box!.slug, name: box!.name, files })
+    await recordAnalytics(box!.id, slug, 'LIST', 200, req)
+    return NextResponse.json({ slug: box!.slug, name: box!.name, files }, { headers: rlHeaders })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error'
     return NextResponse.json({ error: message }, { status: 500 })

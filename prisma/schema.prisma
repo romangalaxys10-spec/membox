@@ -23,4 +23,69 @@ model MemBox {
   userId    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  snapshots       Snapshot[]
+  webhooks        Webhook[]
+  shareTokens     ShareToken[]
+  ttlEntries      TtlEntry[]
+  analyticsEvents AnalyticsEvent[]
+}
+
+model Snapshot {
+  id        String   @id @default(cuid())
+  boxId     String
+  label     String?
+  data      String   // JSON snapshot of file listing + sizes
+  createdAt DateTime @default(now())
+
+  box       MemBox   @relation(fields: [boxId], references: [id], onDelete: Cascade)
+}
+
+model Webhook {
+  id        String   @id @default(cuid())
+  boxId     String
+  url       String
+  events    String   // JSON array: ["write","delete","upload"]
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  box       MemBox   @relation(fields: [boxId], references: [id], onDelete: Cascade)
+}
+
+model ShareToken {
+  id         String    @id @default(cuid())
+  boxId      String
+  token      String    @unique
+  permission String    @default("read") // "read" or "write"
+  label      String?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+
+  box        MemBox    @relation(fields: [boxId], references: [id], onDelete: Cascade)
+}
+
+model TtlEntry {
+  id         String   @id @default(cuid())
+  boxId      String
+  filePath   String
+  ttlSeconds Int
+  expiresAt  DateTime
+
+  box        MemBox   @relation(fields: [boxId], references: [id], onDelete: Cascade)
+
+  @@unique([boxId, filePath])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  boxId     String
+  slug      String
+  method    String
+  path      String?
+  statusCode Int
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  box       MemBox   @relation(fields: [boxId], references: [id], onDelete: Cascade)
 }

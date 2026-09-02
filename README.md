@@ -7,6 +7,10 @@
 <img src="https://img.shields.io/badge/Prisma-7-2D3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma"/>
 <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
 
+<a href="https://codetrendy.com/?utm_source=github.com&utm_medium=badge" target="_blank" rel="nofollow noopener noreferrer">
+  <img src="https://codetrendy.com/api/badge?style=classic" alt="Profiled on CodeTrendy" height="54" />
+</a>
+
 <br/>
 
 <a href="https://codetrendy.com/?utm_source=github.com&utm_medium=badge" target="_blank" rel="nofollow noopener noreferrer">

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { readFileContent, writeFileContent, writeFileBinary, deleteFileOrDir, listBoxFiles, ensureBoxDir } from '@/lib/storage'
+import { rateLimitByKey, recordAnalytics, emitWebhook } from '@/lib/auth'
+import { setTtl, removeTtl, removeTtlPrefix } from '@/lib/ttl'
 
 async function authenticate(req: NextRequest, slug: string) {
   const authHeader = req.headers.get('authorization')
-  const token = authHeader?.replace('Bearer ', '') || req.headers.get('x-membox-token') || ''
+  const token = authHeader?.replace('Bearer ', '') || req.headers.get('x-membox-token') || req.nextUrl.searchParams.get('token') || ''
 
   if (!token) {
     return { error: NextResponse.json({ error: 'Missing token. Provide via Authorization: Bearer <token> or X-MemBox-Token header.' }, { status: 401 }), box: null }
@@ -29,38 +31,44 @@ export async function GET(
 ) {
   try {
     const { slug, path: pathSegments } = await params
+    const { error: rlError, headers: rlHeaders } = rateLimitByKey(slug)
+    if (rlError) return rlError
+
     const { error, box } = await authenticate(req, slug)
     if (error) return error
 
     const filePath = pathSegments.join('/')
 
     if (!filePath) {
-      // List all files/dirs in the box root
       const files = await listBoxFiles(slug)
-      return NextResponse.json({ slug: box!.slug, name: box!.name, files })
+      await recordAnalytics(box!.id, slug, 'LIST', 200, req)
+      return NextResponse.json({ slug: box!.slug, name: box!.name, files }, { headers: rlHeaders })
     }
 
     const content = await readFileContent(slug, filePath)
     if (content === null) {
-      // Check if it's a directory
       const files = await listBoxFiles(slug, filePath)
       if (files.length > 0 || filePath.includes('/')) {
-        return NextResponse.json({ path: filePath, files })
+        await recordAnalytics(box!.id, slug, 'LIST_DIR', 200, req, filePath)
+        return NextResponse.json({ path: filePath, files }, { headers: rlHeaders })
       }
+      await recordAnalytics(box!.id, slug, 'GET', 404, req, filePath)
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
     const accept = req.headers.get('accept') || ''
     if (accept.includes('application/json') && !content.trim().startsWith('{') && !content.trim().startsWith('[')) {
-      return NextResponse.json({ path: filePath, content, format: 'text' })
+      await recordAnalytics(box!.id, slug, 'GET', 200, req, filePath)
+      return NextResponse.json({ path: filePath, content, format: 'text' }, { headers: rlHeaders })
     }
 
-    // Try to parse as JSON, if it works return as JSON
     try {
       const parsed = JSON.parse(content)
-      return NextResponse.json({ path: filePath, data: parsed, format: 'json' })
+      await recordAnalytics(box!.id, slug, 'GET', 200, req, filePath)
+      return NextResponse.json({ path: filePath, data: parsed, format: 'json' }, { headers: rlHeaders })
     } catch {
-      return NextResponse.json({ path: filePath, content, format: 'text' })
+      await recordAnalytics(box!.id, slug, 'GET', 200, req, filePath)
+      return NextResponse.json({ path: filePath, content, format: 'text' }, { headers: rlHeaders })
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error'
@@ -68,14 +76,17 @@ export async function GET(
   }
 }
 
-// PUT /api/m/[slug]/[...path] — Write memory (upsert)
+// PUT /api/m/[slug]/[...path] — Write memory (upsert), supports ?ttl=3600
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string; path: string[] }> }
 ) {
   try {
     const { slug, path: pathSegments } = await params
-    const { error } = await authenticate(req, slug)
+    const { error: rlError, headers: rlHeaders } = rateLimitByKey(slug)
+    if (rlError) return rlError
+
+    const { error, box } = await authenticate(req, slug)
     if (error) return error
 
     const filePath = pathSegments.join('/')
@@ -88,7 +99,6 @@ export async function PUT(
 
     if (contentType.includes('application/json')) {
       const body = await req.json()
-      // Support both { content: "..." } and { data: {...} } and raw JSON
       if (typeof body === 'string') {
         content = body
       } else if (body.content !== undefined) {
@@ -103,7 +113,19 @@ export async function PUT(
     }
 
     await writeFileContent(slug, filePath, content)
-    return NextResponse.json({ success: true, path: filePath, message: 'Memory stored' })
+
+    // Handle TTL via query param
+    const ttlParam = req.nextUrl.searchParams.get('ttl')
+    if (ttlParam) {
+      const ttlSeconds = parseInt(ttlParam)
+      if (ttlSeconds > 0) {
+        await setTtl(box!.id, filePath, ttlSeconds)
+      }
+    }
+
+    await recordAnalytics(box!.id, slug, 'PUT', 200, req, filePath)
+    await emitWebhook(box!.id, 'write', slug, filePath)
+    return NextResponse.json({ success: true, path: filePath, message: 'Memory stored' }, { headers: rlHeaders })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -117,7 +139,11 @@ export async function POST(
 ) {
   try {
     const { slug, path: pathSegments } = await params
-    const { error } = await authenticate(req, slug)
+    const isUpload = pathSegments[0] === 'upload'
+    const { error: rlError, headers: rlHeaders } = rateLimitByKey(slug, isUpload)
+    if (rlError) return rlError
+
+    const { error, box } = await authenticate(req, slug)
     if (error) return error
 
     const filePath = pathSegments.join('/')
@@ -128,7 +154,7 @@ export async function POST(
     const contentType = req.headers.get('content-type') || ''
 
     // Handle multipart file upload when path is "upload"
-    if (pathSegments[0] === 'upload' && contentType.includes('multipart/form-data')) {
+    if (isUpload && contentType.includes('multipart/form-data')) {
       await ensureBoxDir(slug)
       const formData = await req.formData()
       const files = formData.getAll('files')
@@ -163,7 +189,9 @@ export async function POST(
         }
       }
 
-      return NextResponse.json({ uploaded, failed, results })
+      await recordAnalytics(box!.id, slug, 'UPLOAD', uploaded > 0 ? 200 : 400, req, `uploaded=${uploaded}`)
+      await emitWebhook(box!.id, 'upload', slug, folder)
+      return NextResponse.json({ uploaded, failed, results }, { headers: rlHeaders })
     }
 
     // Default: append text/JSON to memory
@@ -180,7 +208,9 @@ export async function POST(
     const content = existing ? existing + '\n' + newContent : newContent
 
     await writeFileContent(slug, filePath, content)
-    return NextResponse.json({ success: true, path: filePath, message: 'Memory appended' })
+    await recordAnalytics(box!.id, slug, 'APPEND', 200, req, filePath)
+    await emitWebhook(box!.id, 'write', slug, filePath)
+    return NextResponse.json({ success: true, path: filePath, message: 'Memory appended' }, { headers: rlHeaders })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error'
     return NextResponse.json({ error: message }, { status: 500 })
@@ -194,7 +224,10 @@ export async function DELETE(
 ) {
   try {
     const { slug, path: pathSegments } = await params
-    const { error } = await authenticate(req, slug)
+    const { error: rlError, headers: rlHeaders } = rateLimitByKey(slug)
+    if (rlError) return rlError
+
+    const { error, box } = await authenticate(req, slug)
     if (error) return error
 
     const filePath = pathSegments.join('/')
@@ -204,10 +237,16 @@ export async function DELETE(
 
     const deleted = await deleteFileOrDir(slug, filePath)
     if (!deleted) {
+      await recordAnalytics(box!.id, slug, 'DELETE', 404, req, filePath)
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, path: filePath, message: 'Memory deleted' })
+    // Clean up TTL entries for this path
+    await removeTtlPrefix(box!.id, filePath)
+
+    await recordAnalytics(box!.id, slug, 'DELETE', 200, req, filePath)
+    await emitWebhook(box!.id, 'delete', slug, filePath)
+    return NextResponse.json({ success: true, path: filePath, message: 'Memory deleted' }, { headers: rlHeaders })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error'
     return NextResponse.json({ error: message }, { status: 500 })
