@@ -91,15 +91,17 @@ async function api(path: string, init: RequestInit = {}, creds?: GhCtx | null): 
   const repo = creds?.repo || REPO
   const branch = creds?.branch || BRANCH
   const url = buildUrl(path, init.body ? {} : { ref: branch }, repo)
+  const extraHeaders = (init.headers || {}) as Record<string, string>
+  const { Accept: acceptOverride, ...restHeaders } = extraHeaders
   return fetch(url, {
     ...init,
     redirect: 'error',
     cache: 'no-store',
     headers: {
       Authorization: `Bearer ${creds?.token || TOKEN}`,
-      Accept: (init.headers?.Accept as string) || 'application/vnd.github+json',
+      Accept: (typeof acceptOverride === 'string' && acceptOverride) || 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
-      ...(init.headers as Record<string, string> | undefined),
+      ...restHeaders,
     },
   })
 }
@@ -131,7 +133,6 @@ export async function ghPutFile(path: string, content: Buffer, message: string, 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message,
-      branch: BRANCH,
       sha: sha || undefined,
       content: content.toString('base64'),
       branch: creds?.branch || BRANCH,
