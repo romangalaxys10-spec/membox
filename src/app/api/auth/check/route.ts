@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, ensureSchema } from '@/lib/db'
+import { db, ensureFreshDb } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
   try {
-    await ensureSchema()
+    await ensureFreshDb()
     const { searchParams } = new URL(req.url)
     const username = searchParams.get('username')
     if (!username) {

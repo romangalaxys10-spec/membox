@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureFreshDb } from '@/lib/db'
 import { readFileContent, writeFileContent, writeFileBinary, deleteFileOrDir, listBoxFiles, ensureBoxDir } from '@/lib/storage'
 import { storageCtxForBox } from '@/lib/user-storage'
 import type { StorageCtx } from '@/lib/storage'
 import { rateLimitByKey, recordAnalytics, emitWebhook } from '@/lib/auth'
 import { setTtl, removeTtl, removeTtlPrefix } from '@/lib/ttl'
+import { ghGetFile } from '@/lib/github-store'
+
+interface ShareEntry { token: string; permission: string; expiresAt: string | null }
+
+// Share tokens are mirrored to shares/<boxId>.json in the central storage repo;
+// this route reads them directly so auth works on every instance even when its
+// local SQLite checkpoint is stale.
+async function findShareToken(boxId: string, token: string): Promise<ShareEntry | null> {
+  try {
+    const raw = await ghGetFile(`shares/${boxId}.json`)
+    if (!raw) return null
+    const shares = JSON.parse(raw.toString('utf-8')) as ShareEntry[]
+    const now = Date.now()
+    return shares.find(s => s.token === token && (!s.expiresAt || new Date(s.expiresAt).getTime() >= now)) || null
+  } catch {
+    return null
+  }
+}
 
 async function authenticate(req: NextRequest, slug: string) {
   const authHeader = req.headers.get('authorization')
@@ -14,13 +32,20 @@ async function authenticate(req: NextRequest, slug: string) {
     return { error: NextResponse.json({ error: 'Missing token. Provide via Authorization: Bearer <token> or X-MemBox-Token header.' }, { status: 401 }), box: null }
   }
 
+  await ensureFreshDb()
   const box = await db.memBox.findUnique({ where: { slug } })
   if (!box) {
     return { error: NextResponse.json({ error: 'MemBox not found' }, { status: 404 }), box: null }
   }
 
   if (box.token !== token) {
-    return { error: NextResponse.json({ error: 'Invalid token' }, { status: 403 }), box: null }
+    // Not the master token — accept a valid share token. Write methods require
+    // a write-permission share; GET accepts both read and write shares.
+    const share = await findShareToken(box.id, token)
+    const wantsWrite = req.method !== 'GET' && req.method !== 'HEAD'
+    if (!share || (wantsWrite && share.permission !== 'write')) {
+      return { error: NextResponse.json({ error: 'Invalid token' }, { status: 403 }), box: null }
+    }
   }
 
   return { error: null, box }
@@ -204,7 +229,10 @@ export async function POST(
 
     if (contentType.includes('application/json')) {
       const body = await req.json()
-      newContent = typeof body === 'string' ? body : JSON.stringify(body, null, 2)
+      if (body === null || typeof body === 'string') newContent = typeof body === 'string' ? body : 'null'
+      else if (body.content !== undefined) newContent = typeof body.content === 'string' ? body.content : JSON.stringify(body.content, null, 2)
+      else if (body.data !== undefined) newContent = JSON.stringify(body.data, null, 2)
+      else newContent = JSON.stringify(body, null, 2)
     } else {
       newContent = await req.text()
     }

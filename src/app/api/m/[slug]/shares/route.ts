@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWriteAccess, authenticate, rateLimitByKey, recordAnalytics } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { writeShare } from '@/lib/share-store'
 import { generateToken } from '@/lib/token'
 
 // POST /api/m/[slug]/_shares — Create share token
@@ -28,10 +29,24 @@ export async function POST(
       data: { boxId: box!.id, token, permission, label, expiresAt },
     })
 
-    await recordAnalytics(box!.id, slug, 'SHARE_CREATE', 200, req)
+    // Mirror to the central repo file so every instance accepts this token
+    // even before its SQLite checkpoint catches up.
+    let mirrored = true
+    try {
+      await writeShare(box!.id, {
+        token: share.token,
+        permission: share.permission,
+        expiresAt: share.expiresAt ? share.expiresAt.toISOString() : null,
+      })
+    } catch {
+      mirrored = false
+    }
+
+    await recordAnalytics(box!.id, slug, 'SHARE_CREATE', 201, req)
     return NextResponse.json({
       id: share.id, token: share.token, permission: share.permission,
       label: share.label, expiresAt: share.expiresAt, createdAt: share.createdAt,
+      mirrored,
     }, { status: 201 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error'

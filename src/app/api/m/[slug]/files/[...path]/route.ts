@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, ensureFreshDb } from '@/lib/db'
 import { readFileBinary } from '@/lib/storage'
 import { storageCtxForBox } from '@/lib/user-storage'
 import path from 'path'
@@ -60,6 +60,9 @@ async function authenticate(req: NextRequest, slug: string) {
     return { error: NextResponse.json({ error: 'Missing token' }, { status: 401 }) }
   }
 
+  // Cold-start bootstrap: restore DB from the storage repo + create tables
+  // before the first query, or a fresh instance 500s with "no such table".
+  await ensureFreshDb()
   const box = await db.memBox.findUnique({ where: { slug } })
   if (!box) {
     return { error: NextResponse.json({ error: 'MemBox not found' }, { status: 404 }) }

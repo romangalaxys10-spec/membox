@@ -127,18 +127,25 @@ export async function ghGetFileSha(path: string, creds?: GhCtx | null): Promise<
 
 export async function ghPutFile(path: string, content: Buffer, message: string, creds?: GhCtx | null): Promise<void> {
   assertSafePath(path)
-  const sha = await ghGetFileSha(path, creds)
-  const res = await api(path, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message,
-      sha: sha || undefined,
-      content: content.toString('base64'),
-      branch: creds?.branch || BRANCH,
-    }),
-  }, creds)
-  if (!res.ok) {
+  // Concurrent writers (multiple instances) cause intermittent 409/422 races
+  // between the sha lookup and the commit — retry a few times before failing.
+  for (let attempt = 0; ; attempt++) {
+    const sha = await ghGetFileSha(path, creds)
+    const res = await api(path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message,
+        sha: sha || undefined,
+        content: content.toString('base64'),
+        branch: creds?.branch || BRANCH,
+      }),
+    }, creds)
+    if (res.ok) return
+    if ((res.status === 409 || res.status === 422) && attempt < 3) {
+      await new Promise(r => setTimeout(r, 250 * (attempt + 1)))
+      continue
+    }
     throw new Error(`GitHub put failed (${res.status})`)
   }
 }

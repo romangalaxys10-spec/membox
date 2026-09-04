@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, ensureSchema, persistDb } from '@/lib/db'
+import { db, ensureFreshDb, persistDb } from '@/lib/db'
 import { encryptSecret, encryptionAvailable } from '@/lib/crypto'
 import { ghGetLogin, ghRepoExists, ghCreatePrivateRepo } from '@/lib/github-store'
 import { ghPutFile, ghDeleteFile } from '@/lib/github-store'
@@ -35,7 +35,7 @@ async function validateRepoAccess(repo: string, token: string): Promise<{ ok: bo
 // GET /api/auth/github?username=x — pairing status (repo name only, never the token)
 export async function GET(req: NextRequest) {
   try {
-    await ensureSchema()
+    await ensureFreshDb()
     const username = req.nextUrl.searchParams.get('username') || ''
     const user = await db.user.findUnique({ where: { username } })
     return NextResponse.json({ paired: Boolean(user?.githubRepo), repo: user?.githubRepo || null })
@@ -63,7 +63,7 @@ Feel free to explore — but edit through MemBox to keep things consistent.
 // token and the repo is created automatically when it doesn't exist yet.
 export async function POST(req: NextRequest) {
   try {
-    await ensureSchema()
+    await ensureFreshDb()
     if (!encryptionAvailable) {
       return NextResponse.json({ error: 'GitHub pairing is not configured on this server (missing APP_SECRET)' }, { status: 503 })
     }
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
 // DELETE /api/auth/github — unpair { username }
 export async function DELETE(req: NextRequest) {
   try {
-    await ensureSchema()
+    await ensureFreshDb()
     const { username } = await req.json()
     const user = await db.user.findUnique({ where: { username: (username || '').trim() } })
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })

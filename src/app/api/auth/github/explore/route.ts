@@ -44,8 +44,7 @@ export async function GET(req: NextRequest) {
     const rel = safeRelPath(req.nextUrl.searchParams.get('path') || '')
     if (rel === null) return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
 
-    const user = await db.user.findUnique({ where: { username } })
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    // Pairing file is authoritative; its absence simply means "no paired repo"
     const creds = await pairingCreds(username)
     if (!creds) return NextResponse.json({ error: 'No paired repo for this user' }, { status: 404 })
     const ctx = ctxFor(creds.repo, creds.token)
